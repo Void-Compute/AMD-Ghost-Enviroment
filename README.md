@@ -1,15 +1,26 @@
 # AMD Ghost Environment
 
 ## Overview
-The AMD Ghost Environment is a lightweight, environment-level wrapper designed to facilitate compatibility between CUDA-centric software and AMD ROCm hardware. By injecting a targeted set of environment variables at runtime, this tool allows an AMD RDNA3 GPU to report its identity as an NVIDIA RTX 4090.
+The AMD Ghost Environment is a lightweight, environment-level wrapper designed to facilitate compatibility between CUDA-centric software and AMD ROCm hardware. By injecting a targeted set of environment variables at runtime, this tool allows various AMD RDNA architectures to report their identity as high-end NVIDIA GeForce RTX equivalents.
 
 This prevents hard-coded architecture checks from blocking execution and ensures that libraries like PyTorch and ONNX Runtime route their workloads through the AMD ROCm compute layer via the `HSA_OVERRIDE_GFX_VERSION` mask.
 
+## Hardware Support Matrix
+The internal lookup table (`mapping.json`) provides translation logic across multiple generations of AMD and NVIDIA architectures:
+
+| AMD Host Series | Mask Version | NVIDIA Spoof Target |
+|:--- |:--- |:--- |
+| **RX 9000 Series** | 12.0.0 | NVIDIA GeForce RTX 5090 |
+| **RX 7000 Series** | 11.0.0 | NVIDIA GeForce RTX 4090 |
+| **RX 6000 Series** | 10.3.0 | NVIDIA GeForce RTX 3090 Ti |
+| **RX 5000 Series** | 10.1.0 | NVIDIA GeForce RTX 2080 Ti |
+
 ## Key Features
-* **Hardware Spoofing:** Overrides OpenGL and Vulkan renderer strings to bypass basic hardware gatekeeping.
-* **Compute Hijacking:** Injects the necessary ROCm architecture masks to execute CUDA instructions on RDNA3 hardware.
-* **Non-Destructive Integration:** Operates purely as a command-line wrapper. It does not permanently modify system files, bash profiles, or global states.
-* **Virtual Environment Support:** Fully compatible with Python `venv`, Conda, and isolated Docker containers.
+* **Multi-Generational Support:** Pre-configured mappings for RDNA 1 through RDNA 4.
+* **Compute Hijacking:** Injects necessary ROCm architecture masks to execute CUDA instructions on AMD hardware.
+* **Non-Destructive Integration:** Operates purely as a command-line wrapper without modifying global system states.
+* **Virtual Environment Support:** Fully compatible with Python `venv`, Conda, and isolated containers.
+
 
 ## Installation
 
@@ -69,7 +80,7 @@ If your terminal does not recognize the `ghost` command (common inside certain v
 ```bash
 ~/AMD-Ghost-Environment/bin/ghost <your-command>
 
-Alternatively, you can temporarily alias it for your current session:
+##Alternatively, you can temporarily alias it for your current session:
 
 alias ghost='~/AMD-Ghost-Environment/bin/ghost'
 
