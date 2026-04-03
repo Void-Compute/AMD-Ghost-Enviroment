@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# --- 1. System Paths & Includes ---
+export BASE_DIR="$HOME/AMD-Ghost-Environment"
+source "$BASE_DIR/lib/logger.sh"
+source "$BASE_DIR/lib/hardware.sh"
+
+# --- 2. Dependency Check ---
+if ! command -v jq &> /dev/null; then
+    log_error "'jq' is not installed. Please run: sudo apt install jq"
+fi
+
+# --- 3. Execute Hardware Sniffer ---
+SERIES=$(get_gpu_series)
+MAP_FILE="$BASE_DIR/configs/mapping.json"
+
+# --- 4. Parse Identity ---
+MASK=$(jq -r ".\"$SERIES\".mask" "$MAP_FILE")
+SPOOF=$(jq -r ".\"$SERIES\".spoof" "$MAP_FILE")
+
+if [[ "$MASK" == "null" || -z "$MASK" ]]; then
+    log_error "Failed to parse mapping.json for series: $SERIES"
+fi
+
+# --- 5. Inject The Identity (The "Ironclad" 2026 Edition) ---
+
+# 1. The Compute Mask (Working for your AI)
+export HSA_OVERRIDE_GFX_VERSION=$MASK
+
+# 2. Mesa Custom Renderer Overrides
+# These override what the driver reports to OpenGL
+export MESA_EXTENSION_OVERRIDE="-GL_AMD_gpu_shader_half_float"
+export MESA_GL_VERSION_OVERRIDE=4.6
+export MESA_GLSL_VERSION_OVERRIDE=460
+
+# 3. The "Direct String" Poisoning
+# Some apps use these specific variables to identify the GPU
+export __GL_RENDERER_STRING="$SPOOF"
+export __GL_VENDOR_STRING="NVIDIA"
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+
+# 4. Vulkan Identity Theft (For RDNA3/4 2026 Drivers)
+# This forces the Vulkan layer to report NVIDIA IDs
+export RADV_FORCE_VND_ID=0x10de  # NVIDIA Hex ID
+export RADV_FORCE_DEV_ID=0x2204  # RTX 3090/4090 Device ID
+
+# 5. Device Select Override
+# This tells the system to prefer the "Spoof" identity for rendering
+export MESA_VK_DEVICE_SELECT="$SPOOF"
+
+# --- 6. Launch Protocol ---
+if [ $# -gt 0 ]; then
+    log_success "Executing payload under Identity: $SPOOF (Mask: $MASK)"
+    exec "$@"
+else
+    log_info "Ghost Shell Activated. Hardware masked as $SPOOF."
+    $SHELL
+fi
