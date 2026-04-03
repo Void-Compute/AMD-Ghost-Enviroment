@@ -63,6 +63,16 @@ ghost python3 -c "import torch, os; print('\n--- SYSTEM DIAGNOSTIC ---\nCUDA Ava
 * `Spoofed Identity: NVIDIA GeForce RTX 4090`
 * `ROCm Version: 6.2` (or your current ROCm version)
 
+### Troubleshooting: "ghost: command not found"
+If your terminal does not recognize the `ghost` command (common inside certain virtual environments or shells), use the absolute path to the wrapper instead:
+
+```bash
+~/AMD-Ghost-Environment/bin/ghost <your-command>
+
+Alternatively, you can temporarily alias it for your current session:
+
+alias ghost='~/AMD-Ghost-Environment/bin/ghost'
+
 ## Technical Architecture
 The `ghost` script utilizes the following primary variables to achieve hardware parity:
 * `HSA_OVERRIDE_GFX_VERSION`: Defines the target AMD architecture for ROCm compatibility.
