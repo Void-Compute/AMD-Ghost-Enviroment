@@ -5,7 +5,14 @@ The AMD Ghost Environment is a lightweight, environment-level wrapper designed t
 
 This prevents hard-coded architecture checks from blocking execution and ensures that libraries like PyTorch and ONNX Runtime route their workloads through the AMD ROCm compute layer via the `HSA_OVERRIDE_GFX_VERSION` mask.
 
-Note on Technical Scope: This is not a binary translator (like ZLUDA or HIP). Instead, it uses ISA Target Spoofing and environment-level overrides to allow ROCm-enabled applications to run on GFX IDs that are not officially in their support matrix.(Though this might be added in the future)
+Note on Technical Scope: This is not a binary translator (like ZLUDA or HIP). Instead, it uses ISA Target Spoofing and environment-level overrides to allow ROCm-enabled applications to run on GFX IDs that are not officially in their support matrix. Still enough to run about 90% of the locked Software (ZLUDA may be added in the future)
+
+ROADMAP:
+Experimental: ZLUDA Integration (Very Very early testing release expected in a couple of months)
+
+Goal: Move beyond "Target Spoofing" and allow the Ghost Environment to run NVIDIA-only CUDA binaries on AMD hardware using the ZLUDA translation layer.
+
+Status: Currently researching automated binary injection. This will allow the wrapper to detect if an application lacks a ROCm path and automatically pivot to CUDA translation on the fly.
 
 ## Hardware Support Matrix
 The internal lookup table (`mapping.json`) provides translation logic across multiple generations of AMD and NVIDIA architectures:
