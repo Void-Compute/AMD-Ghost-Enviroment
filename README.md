@@ -26,7 +26,7 @@ The internal lookup table (`mapping.json`) provides translation logic across mul
 
 1. Clone the repository to your local machine:
 ```bash
-git clone [https://github.com/YOUR_USERNAME/AMD-Ghost-Environment.git](https://github.com/YOUR_USERNAME/AMD-Ghost-Environment.git)
+git clone [https://github.com/ChrisGamer5013/AMD-Ghost-Environment.git](https://github.com/ChrisGamer5013/AMD-Ghost-Environment.git)
 cd AMD-Ghost-Environment
 ```
 
@@ -52,7 +52,7 @@ ghost python3 main.py
 ### 2. Installing Dependencies
 It is highly recommended to run package installations through the wrapper to ensure compile-time hardware checks pass successfully.
 ```bash
-ghost pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/rocm6.2](https://download.pytorch.org/whl/rocm6.2)
+ghost pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/rocm7.2](https://download.pytorch.org/whl/rocm7.2)
 ```
 
 ### 3. Interactive Shell Mode
