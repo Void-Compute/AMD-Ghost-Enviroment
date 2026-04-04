@@ -72,7 +72,7 @@ ghost python3 -c "import torch, os; print('\n--- SYSTEM DIAGNOSTIC ---\nCUDA Ava
 **Expected Output:**
 * `CUDA Available: True`
 * `Spoofed Identity: NVIDIA GeForce RTX 4090`
-* `ROCm Version: 6.2` (or your current ROCm version)
+* `ROCm Version: 7.2` (or your current ROCm version)
 
 ### Troubleshooting: "ghost: command not found"
 If your terminal does not recognize the `ghost` command (common inside certain virtual environments or shells), use the absolute path to the wrapper instead:
