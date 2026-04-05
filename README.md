@@ -8,8 +8,13 @@ This prevents hard-coded architecture checks from blocking execution and ensures
 Note on Technical Scope: This is not a binary translator (like ZLUDA). Instead, it uses ISA Target Spoofing and environment-level overrides to allow ROCm-enabled applications to run on GFX IDs that are not officially in their support matrix. Still enough to run about 90% of the locked Software (ZLUDA may be added in the future)
 
 ROADMAP:
-Experimental: ZLUDA Integration expected release
-Q3 2026. Note: Development is currently balanced alongside full-time studies, so updates may be paced accordingly to ensure stability over speed.
+
+Experimental: ZLUDA Integration 
+
+Expected release
+Q3 2026. 
+
+Note: Development is currently balanced alongside full-time studies, so updates may be paced accordingly to ensure stability over speed.
 
 Goal: Move beyond "Target Spoofing" and allow the Ghost Environment to run NVIDIA-only CUDA binaries on AMD hardware using the ZLUDA translation layer.
 
