@@ -107,3 +107,25 @@ The `ghost` script utilizes the following primary variables to achieve hardware 
 
 ## Disclaimer
 This project is for educational and developmental purposes. Hardware spoofing may violate the terms of service of certain proprietary applications. Use responsibly.
+
+
+
+---
+
+##  Ghost-Wrapper: Support the Grind
+
+This tool exists because we shouldn't have to pay the "NVIDIA Tax" to run top-tier AI. If **Ghost-Wrapper** saved you from a 50-step Linux tutorial,consider supporting the project.
+
+As a solo student dev, I keep things independent. No banks, no trackers—just code and caffeine.
+
+### 💎 Digital Tokens (Direct Support)
+| Asset | Address |
+| :--- | :--- |
+| **Ethereum (ETH)** | `0x9e046b3fa85932351b34520837d95bc1ad309748` |
+| **Bitcoin (BTC)** | `bc1q30wftehky6ct06pshrjh3ekhe9as9uzzdemd0r` |
+
+### 🌟 Social Support
+* **Star this Repo:** It’s the best way to help the project grow.
+* **Report a Bug**
+
+*Keeping the RDNA dream alive, one wrapper at a time.*
