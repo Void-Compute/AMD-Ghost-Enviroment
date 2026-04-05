@@ -94,10 +94,11 @@ If your terminal does not recognize the `ghost` command (common inside certain v
 
 ```bash
 ~/AMD-Ghost-Environment/bin/ghost <your-command>
-
+```
 ##Alternatively, you can temporarily alias it for your current session:
-
+```bash
 alias ghost='~/AMD-Ghost-Environment/bin/ghost'
+```
 
 ## Technical Architecture
 The `ghost` script utilizes the following primary variables to achieve hardware parity:
