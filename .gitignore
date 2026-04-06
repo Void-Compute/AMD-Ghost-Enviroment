@@ -1,15 +1,12 @@
-# Ignore log files
+
 logs/*.log
 logs/*.txt
 
-# Ignore AI model weights
 *.gguf
 *.bin
 models/
 
-# Keep the logs folder structure intact, but ignore its contents
 !logs/.gitkeep
 
-# Ignore OS junk files
 .DS_Store
 Thumbs.db
