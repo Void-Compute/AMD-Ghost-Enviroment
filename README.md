@@ -30,7 +30,7 @@ The internal lookup table (`mapping.json`) provides translation logic across mul
 | **RX 6000 Series** | 10.3.0 | NVIDIA GeForce RTX 3090 Ti |
 | **RX 5000 Series** | 10.1.0 | NVIDIA GeForce RTX 2080 Ti |
 
-*(Note: GFX Version on RDNA 4 cards has been changed from 12.0 to 11.0 due to missing compatibility in most libraries due to the card being too new)*
+*(Note: GFX Version on RDNA 4 cards has been changed from 12.0 to 11.0 due to missing compatibility in most libraries because the card is too new and many libs currently dont have the necessary support)*
 
 ## Key Features
 * **Multi-Generational Support:** Pre-configured mappings for RDNA 1 through RDNA 4.
