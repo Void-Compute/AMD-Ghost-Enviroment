@@ -12,7 +12,7 @@ ROADMAP:
 Experimental: ZLUDA Integration 
 
 Expected release
-Q3 2026. 
+Q2 2026. 
 
 Note: Development is currently balanced alongside full-time studies, so updates may be paced accordingly to ensure stability over speed.
 
