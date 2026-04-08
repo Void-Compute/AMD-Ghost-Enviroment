@@ -43,7 +43,7 @@ The internal lookup table (`mapping.json`) provides translation logic across mul
 
 1. Clone the repository to your local machine:
 ```bash
-git clone [https://github.com/ChrisGamer5013/AMD-Ghost-Environment.git](https://github.com/ChrisGamer5013/AMD-Ghost-Environment.git)
+git clone https://github.com/ChrisGamer5013/AMD-Ghost-Environment.git
 cd AMD-Ghost-Environment
 ```
 
