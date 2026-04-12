@@ -31,7 +31,7 @@
 
 # --- DYNAMIC DEVICE DETECTION & JSON MAPPING ---
 detect_and_override_gpu() {
-    local gpu_name=$(lspci -vnn 2>/dev/null | grep -i vga | grep -i amd | head -n 1)
+    local gpu_name=$(lspci -vnn 2>/dev/null | grep -iE 'vga|3d|display' | grep -iE 'amd|advanced micro devices' | head -n 1)
     local gpu_pci_id=$(echo "$gpu_name" | grep -oP '\[1002:\K[0-9a-f]{4}')
     local series_exact=$(echo "$gpu_name" | grep -oP '(9|8|7|6|5)\d{3}' | head -1)
     local gpu_series="7000"
@@ -47,12 +47,47 @@ detect_and_override_gpu() {
         esac
     fi
 
-    local script_dir=$(dirname "$(realpath "${BASH_SOURCE[0]:-$0}")")
-    local mapping_file="$script_dir/config/mapping.json"
+    # --- BULLETPROOF MAPPING FINDER ---
+    local mapping_file=""
+    local cache_file="$HOME/.config/ghost_mapping_path"
+
+    # 1. Check Cache
+    if [ -f "$cache_file" ]; then
+        mapping_file=$(cat "$cache_file")
+    fi
+
+    # 2. Check Relative Paths if Cache is empty or broken
+    if [ -z "$mapping_file" ] || [ ! -f "$mapping_file" ]; then
+        local script_path=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || realpath "${BASH_SOURCE[0]:-$0}" 2>/dev/null)
+        local script_dir=$(dirname "$script_path" 2>/dev/null)
+        
+        if [ -f "$script_dir/../config/mapping.json" ]; then
+            mapping_file="$script_dir/../config/mapping.json"
+        elif [ -f "$script_dir/config/mapping.json" ]; then
+            mapping_file="$script_dir/config/mapping.json"
+        elif [ -f "$PWD/../config/mapping.json" ]; then
+            mapping_file="$PWD/../config/mapping.json"
+        elif [ -f "$PWD/config/mapping.json" ]; then
+            mapping_file="$PWD/config/mapping.json"
+        fi
+    fi
+
+    # 3. Aggressive Search if all else fails
+    if [ -z "$mapping_file" ] || [ ! -f "$mapping_file" ]; then
+        mapping_file=$(find "$HOME" -maxdepth 5 -type f -path "*/AMD-Ghost-Enviroment/config/mapping.json" 2>/dev/null | head -n 1)
+    fi
+
+    # 4. Save to Cache
+    if [ -n "$mapping_file" ] && [ -f "$mapping_file" ]; then
+        mkdir -p "$HOME/.config"
+        echo "$mapping_file" > "$cache_file"
+    fi
+    # ----------------------------------
+
     local gfx_mask="11.0.0"
     local spoof_name="NVIDIA GeForce RTX 4090"
 
-    if [ -f "$mapping_file" ] && command -v python3 >/dev/null 2>&1; then
+    if [ -n "$mapping_file" ] && [ -f "$mapping_file" ] && command -v python3 >/dev/null 2>&1; then
         local parsed=$(python3 -c '
 import json, sys
 try:
@@ -66,8 +101,10 @@ except Exception:
 print("11.0.0|NVIDIA GeForce RTX 4090")
 ' "$mapping_file" "$gpu_series")
         
-        gfx_mask=$(echo "$parsed" | cut -d'|' -f1)
-        spoof_name=$(echo "$parsed" | cut -d'|' -f2)
+        if [ -n "$parsed" ]; then
+            gfx_mask=$(echo "$parsed" | cut -d'|' -f1)
+            spoof_name=$(echo "$parsed" | cut -d'|' -f2)
+        fi
     fi
 
     export HSA_OVERRIDE_GFX_VERSION="$gfx_mask"
@@ -97,17 +134,36 @@ export -f nvidia-smi
 
 enter_ghost_env() {
     echo -e "\e[36m[GHOST]\e[0m Initializing Virtual Environment..."
-    
+
     if [ ! -f "$HOME/.config/ghost_env_setup" ]; then
         first_startup_wizard
     fi
 
+    # Resolve the actual script location to mimic File Explorer double-click
     local script_path="$(realpath "$0")"
+    local script_dir="$(dirname "$script_path")"
     local TMP_RC=$(mktemp)
-    
+
     cat << EOF > "$TMP_RC"
 # Source user's standard environment first
 [ -f ~/.bashrc ] && source ~/.bashrc
+
+# ---------------------------------------------------------
+# MIMIC FILE EXPLORER: Change to the script's actual directory
+# ---------------------------------------------------------
+cd "$script_dir"
+
+# ---------------------------------------------------------
+# Auto-enter the Python venv located next to the script
+# ---------------------------------------------------------
+if [ -f "$script_dir/venv/bin/activate" ]; then
+    source "$script_dir/venv/bin/activate"
+    echo -e "\e[32m[GHOST] Python Venv Activated: \$VIRTUAL_ENV\e[0m"
+elif [ -f "\$PWD/venv/bin/activate" ]; then
+    source "\$PWD/venv/bin/activate"
+elif [ -f "\$HOME/venv/bin/activate" ]; then
+    source "\$HOME/venv/bin/activate"
+fi
 
 # Source this script to load all functions into the sub-shell
 source "$script_path" --source-only
@@ -333,7 +389,6 @@ music_menu() {
 }
 
 toggle_music() {
-    # BACK TO BASICS: mpg123 is the only player guaranteed to work silently in Linux Mint
     if ! command -v mpg123 >/dev/null 2>&1; then
         clear
         echo -e "\e[33m[GHOST] Audio player (mpg123) is missing. Auto-installing now...\e[0m"
@@ -432,8 +487,6 @@ launch_doom() {
         return
     fi
 
-    # THE WINDOW AUTO-CLOSE FIX: The new terminal window runs a tiny loop that checks the AI log file.
-    # The millisecond the AI finishes loading, the terminal window executes 'exit' and closes itself!
     local launch_cmd="cd \"$doom_dir\" && export LINES=35 COLUMNS=100 && ( while true; do if grep -qiE 'running on local url|uvicorn running on|starting web server|http://(127\.0\.0\.1|0\.0\.0\.0|localhost):[0-9]+' \"$log_file\" 2>/dev/null || ss -tulnp 2>/dev/null | grep -q \":$config_port \"; then killall -9 doom-ascii 2>/dev/null; exit; fi; sleep 1; done ) & exec \"$doom_bin\" -iwad \"$doom_wad\""
     
     if command -v gnome-terminal >/dev/null 2>&1; then
@@ -500,6 +553,8 @@ waiting_room() {
 
         if [ -n "$dynamic_port" ] || [ "$log_ready" -eq 1 ] || ss -tulnp 2>/dev/null | grep -q ":$config_port "; then
             stop_music
+            killall -9 doom-ascii 2>/dev/null
+            pkill -9 -x doom-ascii 2>/dev/null
             clear
             break
         fi
@@ -573,7 +628,7 @@ run_with_failover() {
     local log_file=$(mktemp)
     local user_aborted=0
 
-    trap 'user_aborted=1; stop_music; killall -9 doom-ascii 2>/dev/null; kill -9 $app_pid 2>/dev/null' SIGINT
+    trap 'user_aborted=1; stop_music; killall -9 doom-ascii 2>/dev/null; pkill -9 -x doom-ascii 2>/dev/null; kill -9 $app_pid 2>/dev/null' SIGINT
 
     "$@" < /dev/null > "$log_file" 2>&1 &
     local app_pid=$!

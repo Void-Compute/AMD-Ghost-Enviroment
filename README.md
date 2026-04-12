@@ -56,10 +56,15 @@ sudo ./bin/ghost install
 ## Usage
 
 ### 1. Enter the Ghost Environment
-Open a fresh terminal and type:
-```bash
-ghost
-```
+
+## Quick Start
+To initialize the system:
+1. **Open your File Explorer.**
+2. **Navigate to the Ghost folder.**
+3. **Double-click the 'ghost' script file.** (Choose 'Run in Terminal' if prompted).
+
+The environment will automatically resolve the correct directory, activate your Python venv, and apply all AMD/NVIDIA spoofing masks.
+
 *On your first run, the First-Startup Wizard will ask you which AI tool you are using and automatically download the ZLUDA translation engine.*
 
 ### 2. Launch Your AI Application
@@ -83,7 +88,8 @@ To confirm that the wrapper is successfully spoofing the hardware identity and l
 python3 -c "import torch, os; print('\n--- SYSTEM DIAGNOSTIC ---\nCUDA Available:', torch.cuda.is_available(), '\nHardware Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None', '\nSpoofed Identity:', os.getenv('__GL_RENDERER_STRING'), '\nROCm Version:', torch.version.hip, '\n-------------------------')"
 ```
 
-## Troubleshooting
+## Troubleshooting & Debugging
+* **System Link**: Note that the `ghost` simple systemlink command (installing to /usr/local/bin) is currently a **Work In Progress (WIP)**. If the global command fails, please revert to the double-click method.
 
 **DOOM looks like a jumbled mess of letters!**
 Bash cannot physically change your GUI font size. If DOOM looks stretched or unreadable:
