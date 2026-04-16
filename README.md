@@ -93,7 +93,7 @@ python3 -c "import torch, os; print('\n--- SYSTEM DIAGNOSTIC ---\nCUDA Available
 
 **DOOM looks like a jumbled mess of letters!**
 Bash cannot physically change your GUI font size. If DOOM looks stretched or unreadable:
-1. Maximize your terminal window.
+1. Change Terminal Size to 80x120
 2. Press CTRL + - (Minus) 5 or 6 times to zoom out. Smaller fonts = Higher Resolution ASCII graphics!
 
 **The Music won't play / No Audio**
