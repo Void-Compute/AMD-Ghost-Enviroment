@@ -9,11 +9,24 @@ ROADMAP:
 
 Completed: Automated ZLUDA Integration, Smart Failover Logic, Interactive TUI, Auto-Dependency Installer.
 
-Next Big Thing: Full Windows Native Support
+Completed: Full Windows Native Support
 Goal: Bring the entire Ghost Environment, including ZLUDA translation, hardware spoofing, and the Waiting Room TUI natively to Windows.
-Status: Currently researching Windows API hooking and PowerShell PTY isolation. 
+Status: Achieved via a hardened PowerShell daemon with WMI/DXDiag hardware polling and native Windows API integration.
 
 Note: Development is currently balanced alongside full-time studies, so updates may be paced accordingly to ensure stability over speed.
+
+## System Requirements & Prerequisites
+
+**Windows:**
+* **OS:** Windows 10 or Windows 11.
+* **Drivers:** Latest AMD Software: Adrenalin Edition or PRO Edition.
+* **AMD HIP SDK:** *Crucial* for native ROCm execution and allows Ghost to accurately poll VRAM and Temperature data.
+* **PowerShell:** Version 5.1 or newer (Built into Windows).
+
+**Linux:**
+* **OS:** Ubuntu 22.04/24.04 or compatible Debian-based distro.
+* **Drivers:** AMD ROCm dkms drivers.
+* **Audio:** `mpg123` (Required for the Waiting Room music).
 
 ## Hardware Support Matrix
 The internal lookup table (mapping.json) provides dynamic translation logic across multiple generations of AMD and NVIDIA architectures:
@@ -36,6 +49,7 @@ The internal lookup table (mapping.json) provides dynamic translation logic acro
 
 ## Installation
 
+### Linux
 1. Clone the repository to your local machine:
 ```bash
 git clone https://github.com/Void-Compute/AMD-Ghost-Enviroment.git
@@ -53,6 +67,11 @@ sudo ./bin/ghost install
 ```
 *(This creates a secure symbolic link, allowing you to type `ghost` from anywhere on your system).*
 
+### Windows
+1. Clone or download the repository to your local machine.
+2. Open the folder containing the Windows script.
+3. Right-click `ghost.ps1` and select **Run with PowerShell**.
+
 ## Usage
 
 ### 1. Enter the Ghost Environment
@@ -61,7 +80,7 @@ sudo ./bin/ghost install
 To initialize the system:
 1. **Open your File Explorer.**
 2. **Navigate to the Ghost folder.**
-3. **Double-click the 'ghost' script file.** (Choose 'Run in Terminal' if prompted).
+3. **Double-click the 'ghost' script file (Linux) or run 'ghost.ps1' (Windows).** (Choose 'Run in Terminal' if prompted).
 
 The environment will automatically resolve the correct directory, activate your Python venv, and apply all AMD/NVIDIA spoofing masks.
 
@@ -89,6 +108,16 @@ python3 -c "import torch, os; print('\n--- SYSTEM DIAGNOSTIC ---\nCUDA Available
 ```
 
 ## Troubleshooting & Debugging
+
+**Windows: "Running scripts is disabled on this system"**
+By default, Windows restricts custom PowerShell scripts. Open PowerShell as Administrator and run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Windows: VRAM/Temp stuck on "Loading..."**
+Ensure the **AMD HIP SDK** is installed and your display drivers are up to date. The Windows version of Ghost relies on `dxdiag` and WMI to poll hardware stats.
+
 * **System Link**: Note that the `ghost` simple systemlink command (installing to /usr/local/bin) is currently a **Work In Progress (WIP)**. If the global command fails, please revert to the double-click method.
 
 **DOOM looks like a jumbled mess of letters!**
@@ -115,8 +144,8 @@ If the global installation failed, you can run it via absolute path:
 The ghost daemon utilizes the following primary variables and techniques to achieve hardware parity:
 * **HSA_OVERRIDE_GFX_VERSION**: Defines the target AMD architecture for ROCm compatibility.
 * **HSA_ENABLE_SDMA=0**: Disables PCIe atomics to prevent crashes on newer RDNA architectures.
-* **LD_PRELOAD Injection**: Dynamically injects libcuda.so.1 (ZLUDA) into the Python process tree, intercepting CUDA calls and translating them to AMD HIP in real-time.
-* **PTY Isolation**: Uses Pseudo-Terminals to isolate background processes, ensuring the TUI and DOOM have raw, uninterrupted access to /dev/tty keyboard inputs.
+* **LD_PRELOAD Injection (Linux) / PATH Injection (Windows)**: Dynamically injects ZLUDA into the Python process tree, intercepting CUDA calls and translating them to AMD HIP in real-time.
+* **PTY Isolation**: Uses Pseudo-Terminals (Linux) and hidden process redirection (Windows) to isolate background processes, ensuring the TUI and DOOM have raw, uninterrupted access to keyboard inputs.
 
 ## Disclaimer
 This project is for educational and developmental purposes. Hardware spoofing and binary translation may violate the terms of service of certain proprietary applications. Use responsibly.
