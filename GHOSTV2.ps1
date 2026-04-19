@@ -33,6 +33,8 @@ function Get-AmdGpuSeries {
         return ($matches[1] + "000")
     } elseif ($gpu.Name -match "Radeon\s*(8|7|6)\d{2}M\b") {
         return ($matches[1] + "000")
+    } elseif ($gpu.Name -match "MI50") {
+        return "MI50"
     }
     return "UNKNOWN"
 }
