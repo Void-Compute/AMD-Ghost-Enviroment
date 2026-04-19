@@ -376,8 +376,7 @@ function Show-WaitingRoom {
         if ($status.Length -gt 54) { $status = $status.Substring(0, 54) + ".." }
 
         $backend = if ($ModeFlag -eq "ZLUDA") { "[ BACKEND: Failover Detected -> ZLUDA Active ]" } else { "[ BACKEND: ROCm Native -> Monitoring for failover ]" }
-
-        # FLICKER-FREE TUI FIX: Reset cursor to 0,0 instead of clearing the screen
+        
         [Console]::SetCursorPosition(0, 0)
         
         Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
