@@ -1,91 +1,125 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AMD-Ghost-Environment
-# License: GPL-3.0
+# AMD Ghost Environment (Linux Consumer Edition v2.8 - Final Master)
+# License: AGPL-3.0
 # Author: ChrisGamer5013
-# ==============================================================================
-# ROADMAP (22-Commit History Preserved):
-# 1. Initial commit: Basic ROCm environment variables.
-# 2. Added HSA_OVERRIDE_GFX_VERSION for RDNA 2.
-# 3. Fixed gfx1030 masking issues.
-# 4. Added RDNA 3 (gfx1100) support.
-# 5. Implemented dynamic PCI ID detection.
-# 6. Added fallback for unsupported APUs.
-# 7. Refactored device detection logic.
-# 8. Added gfx11 masking for RDNA 4 hardware (Navi 4x).
-# 9. Fixed memory allocation faults on gfx1103.
-# 10. Added preliminary ZLUDA support.
-# 11. Updated ROCm 6.0 compatibility flags.
-# 12. Added HIP_VISIBLE_DEVICES parsing.
-# 13. Fixed multi-GPU override bugs.
-# 14. Added HSA_ENABLE_SDMA=0 for stability.
-# 15. Tweaked RDNA 4 spoofing to use gfx1100.
-# 16. Added HSA_DISABLE_CACHE=1 for debugging.
-# 17. Removed deprecated ROCm 5.x flags.
-# 18. Added support for custom PyTorch wheels.
-# 19. Fixed permissions issue on /dev/kfd.
-# 20. Added automatic rocm-smi polling.
-# 21. Optimized HSA_OVERRIDE_GFX_VERSION tables.
-# 22. Finalized RDNA 4 (gfx1200 -> gfx1100) masking logic.
+# Description: A native Bash daemon that spoofs up to two AMD RDNA/Vega GPUs,
+# injects the ZLUDA translation layer, and provides a Waiting Room TUI with DOOM.
 # ==============================================================================
 
-# --- DYNAMIC DEVICE DETECTION & JSON MAPPING ---
+export LANG=en_US.UTF-8
+
+GHOST_DIR="$HOME/.ghost"
+ZLUDA_DIR="$GHOST_DIR/zluda"
+DOOM_DIR="$GHOST_DIR/doom"
+MUSIC_DIR="$GHOST_DIR/music"
+CONFIG_DIR="$HOME/.config"
+CONFIG_FILE="$CONFIG_DIR/ghost_env_setup"
+
+# ANTI-NESTING LOCK
+if [ "$GHOST_ENV_ACTIVE" == "1" ] && [[ "$*" != *"ghost-start"* ]]; then
+    echo -e "\e[32m[GHOST] You are already inside the Ghost Environment.\e[0m"
+    exit 0
+fi
+
+# ==============================================================================
+# PHASE 1: DUAL-GPU DETECTION & JSON MAPPING
+# ==============================================================================
+
 detect_and_override_gpu() {
-    local gpu_name=$(lspci -vnn 2>/dev/null | grep -iE 'vga|3d|display' | grep -iE 'amd|advanced micro devices' | head -n 1)
-    local gpu_pci_id=$(echo "$gpu_name" | grep -oP '\[1002:\K[0-9a-f]{4}')
-    local series_exact=$(echo "$gpu_name" | grep -oP '(9|8|7|6|5)\d{3}' | head -1)
-    local gpu_series="7000"
+    local gpu_list=()
+    
+    for pci_path in /sys/bus/pci/devices/*; do
+        if [ -f "$pci_path/vendor" ] && [ "$(cat "$pci_path/vendor")" == "0x1002" ]; then
+            local class=$(cat "$pci_path/class" 2>/dev/null)
+            if [[ "$class" == 0x030000 || "$class" == 0x030200 || "$class" == 0x038000 ]]; then
+                local vram_bytes=0
+                if [ -f "$pci_path/mem_info_vram_total" ]; then
+                    vram_bytes=$(cat "$pci_path/mem_info_vram_total")
+                fi
+                
+                # Filter out GPUs with < 2GB VRAM (iGPUs)
+                if [ "$vram_bytes" -ge 2147483648 ]; then
+                    local name=$(lspci -vnn -s $(basename $pci_path) | grep -iE 'vga|3d|display' | head -n 1)
+                    
+                    # FIX 1: VRAM UNIT CONVERSION (Bytes to GB)
+                    local vram_gb=$(awk "BEGIN {printf \"%.1f\", $vram_bytes / 1073741824}")
+                    
+                    # FIX 2: DUAL-GPU "RENDER-NODE" MISMATCH (Extract exact ROCm index via renderD*)
+                    local render_node=$(ls -1 "$pci_path/drm/" 2>/dev/null | grep -oP 'renderD\K\d+' | head -n 1)
+                    local rocm_index=0
+                    if [ -n "$render_node" ]; then
+                        rocm_index=$((render_node - 128))
+                    fi
+                    
+                    gpu_list+=("$vram_bytes|$rocm_index|$name|$vram_gb")
+                fi
+            fi
+        fi
+    done
 
-    if [ -n "$series_exact" ]; then
-        gpu_series=$(( (series_exact / 1000) * 1000 ))
-    else
-        case "$gpu_pci_id" in
-            "744c"|"7440"|"7441") gpu_series="9000" ;;
-            "7448"|"7449") gpu_series="7000" ;;
-            "73bf"|"73df"|"73e3") gpu_series="6000" ;;
-            *) gpu_series="7000" ;;
-        esac
-    fi
+    # Sort by VRAM descending and take top 2
+    IFS=$'\n' sorted_gpus=($(sort -nr <<<"${gpu_list[*]}"))
+    unset IFS
 
-    # --- BULLETPROOF MAPPING FINDER ---
-    local mapping_file=""
-    local cache_file="$HOME/.config/ghost_mapping_path"
+    local cluster_count=${#sorted_gpus[@]}
+    [ $cluster_count -gt 2 ] && cluster_count=2
 
-    # 1. Check Cache
-    if [ -f "$cache_file" ]; then
-        mapping_file=$(cat "$cache_file")
-    fi
-
-    # 2. Check Relative Paths if Cache is empty or broken
-    if [ -z "$mapping_file" ] || [ ! -f "$mapping_file" ]; then
-        local script_path=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || realpath "${BASH_SOURCE[0]:-$0}" 2>/dev/null)
-        local script_dir=$(dirname "$script_path" 2>/dev/null)
+    local primary_name="UNKNOWN"
+    local hip_devices="0"
+    export GHOST_VRAM_GB="N/A"
+    
+    if [ $cluster_count -gt 0 ]; then
+        primary_name=$(echo "${sorted_gpus[0]}" | cut -d'|' -f3)
+        local idx1=$(echo "${sorted_gpus[0]}" | cut -d'|' -f2)
+        export GHOST_VRAM_GB=$(echo "${sorted_gpus[0]}" | cut -d'|' -f4)
+        hip_devices="$idx1"
         
-        if [ -f "$script_dir/../config/mapping.json" ]; then
-            mapping_file="$script_dir/../config/mapping.json"
-        elif [ -f "$script_dir/config/mapping.json" ]; then
-            mapping_file="$script_dir/config/mapping.json"
-        elif [ -f "$PWD/../config/mapping.json" ]; then
-            mapping_file="$PWD/../config/mapping.json"
-        elif [ -f "$PWD/config/mapping.json" ]; then
-            mapping_file="$PWD/config/mapping.json"
+        if [ $cluster_count -gt 1 ]; then
+            local idx2=$(echo "${sorted_gpus[1]}" | cut -d'|' -f2)
+            local vram2=$(echo "${sorted_gpus[1]}" | cut -d'|' -f4)
+            export GHOST_VRAM_GB=$(awk "BEGIN {printf \"%.1f\", $GHOST_VRAM_GB + $vram2}")
+            hip_devices="$idx1,$idx2"
         fi
     fi
 
-    # 3. Aggressive Search if all else fails
-    if [ -z "$mapping_file" ] || [ ! -f "$mapping_file" ]; then
-        mapping_file=$(find "$HOME" -maxdepth 5 -type f -path "*/AMD-Ghost-Enviroment/config/mapping.json" 2>/dev/null | head -n 1)
+    local series="UNKNOWN"
+
+    if echo "$primary_name" | grep -qiE "(RX|Pro W)\s*(9|8|7|6|5)[0-9]{3}"; then
+        series=$(echo "$primary_name" | grep -oP '(9|8|7|6|5)(?=[0-9]{3})' | head -1)"000"
+    elif echo "$primary_name" | grep -qiE "Radeon\s*(8|7|6)[0-9]{2}M"; then
+        series=$(echo "$primary_name" | grep -oP '(8|7|6)(?=[0-9]{2}M)' | head -1)"000"
+    elif echo "$primary_name" | grep -qiE "MI50|Radeon\s*VII"; then
+        series="MI50"
+    elif echo "$primary_name" | grep -qiE "Vega\s*(56|64)"; then
+        local v_num=$(echo "$primary_name" | grep -oP 'Vega\s*\K(56|64)' | head -1)
+        series="VEGA$v_num"
+    elif echo "$primary_name" | grep -qiE "Vega\s*Frontier"; then
+        series="VEGA64"
     fi
 
-    # 4. Save to Cache
-    if [ -n "$mapping_file" ] && [ -f "$mapping_file" ]; then
-        mkdir -p "$HOME/.config"
-        echo "$mapping_file" > "$cache_file"
-    fi
-    # ----------------------------------
+    local mapping_file=""
+    local script_path=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || realpath "${BASH_SOURCE[0]:-$0}" 2>/dev/null)
+    local script_dir=$(dirname "$script_path" 2>/dev/null)
+    
+    local search_paths=(
+        "$script_dir/../configs/mapping.json"
+        "$script_dir/configs/mapping.json"
+        "$PWD/configs/mapping.json"
+        "$script_dir/../config/mapping.json"
+        "$script_dir/config/mapping.json"
+        "$PWD/config/mapping.json"
+    )
+
+    for path in "${search_paths[@]}"; do
+        if [ -f "$path" ]; then
+            mapping_file="$path"
+            break
+        fi
+    done
 
     local gfx_mask="11.0.0"
-    local spoof_name="NVIDIA GeForce RTX 4090"
+    local spoof_name="Unknown AMD GPU (Spoofed)"
 
     if [ -n "$mapping_file" ] && [ -f "$mapping_file" ] && command -v python3 >/dev/null 2>&1; then
         local parsed=$(python3 -c '
@@ -94,12 +128,15 @@ try:
     with open(sys.argv[1], "r") as f: data = json.load(f)
     series = sys.argv[2]
     if series in data:
-        print(f"{data[series].get(\"mask\", \"11.0.0\")}|{data[series].get(\"spoof\", \"NVIDIA GeForce RTX 4090\")}")
+        print(f"{data[series].get(\"mask\", \"11.0.0\")}|{data[series].get(\"spoof\", \"Unknown AMD GPU (Spoofed)\")}")
+        sys.exit(0)
+    elif "DEFAULT" in data:
+        print(f"{data[\"DEFAULT\"].get(\"mask\", \"11.0.0\")}|{data[\"DEFAULT\"].get(\"spoof\", \"Unknown AMD GPU (Spoofed)\")}")
         sys.exit(0)
 except Exception:
     pass
-print("11.0.0|NVIDIA GeForce RTX 4090")
-' "$mapping_file" "$gpu_series")
+print("11.0.0|Unknown AMD GPU (Spoofed)")
+' "$mapping_file" "$series")
         
         if [ -n "$parsed" ]; then
             gfx_mask=$(echo "$parsed" | cut -d'|' -f1)
@@ -107,137 +144,72 @@ print("11.0.0|NVIDIA GeForce RTX 4090")
         fi
     fi
 
+    if [ $cluster_count -gt 1 ]; then
+        spoof_name="$spoof_name (Dual-GPU)"
+        export GHOST_VRAM_GB="$GHOST_VRAM_GB GB (Dual)"
+    else
+        export GHOST_VRAM_GB="$GHOST_VRAM_GB GB"
+    fi
+
     export HSA_OVERRIDE_GFX_VERSION="$gfx_mask"
+    export HIP_VISIBLE_DEVICES="$hip_devices"
+    export ROCR_VISIBLE_DEVICES="$hip_devices"
+    export CUDA_VERSION="12.4"
+    export NVIDIA_VISIBLE_DEVICES="all"
     export GHOST_SPOOF_NAME="$spoof_name"
-    export HSA_ENABLE_SDMA=0
-    export HIP_VISIBLE_DEVICES=0
+    
+    local series_num=7000
+    [[ "$series" =~ ^[0-9]+$ ]] && series_num=$series
+    if [ "$series_num" -ge 9000 ]; then
+        export HSA_ENABLE_SDMA=0
+    else
+        export HSA_ENABLE_SDMA=1
+    fi
 
-    if [ "$gpu_series" == "9000" ]; then
-        export ROCM_PATH=/opt/rocm
+    if [[ ":$PATH:" != *":$ZLUDA_DIR:"* ]]; then
+        export PATH="$ZLUDA_DIR:$PATH"
     fi
 }
 
 # ==============================================================================
-# PHASE 1: THE `ghost` VIRTUAL ENVIRONMENT (VENV)
-# ==============================================================================
-
-install_ghost() {
-    echo -e "\e[36m[GHOST]\e[0m Installing Ghost Environment globally..."
-    sudo ln -sf "$(realpath "$0")" /usr/local/bin/ghost
-    echo -e "\e[32m[GHOST] Installation complete. Type 'ghost' to enter the sandbox.\e[0m"
-}
-
-nvidia-smi() {
-    echo "${GHOST_SPOOF_NAME:-NVIDIA GeForce RTX 4090}"
-}
-export -f nvidia-smi
-
-enter_ghost_env() {
-    echo -e "\e[36m[GHOST]\e[0m Initializing Virtual Environment..."
-
-    if [ ! -f "$HOME/.config/ghost_env_setup" ]; then
-        first_startup_wizard
-    fi
-
-    # Resolve the actual script location to mimic File Explorer double-click
-    local script_path="$(realpath "$0")"
-    local script_dir="$(dirname "$script_path")"
-    local TMP_RC=$(mktemp)
-
-    cat << EOF > "$TMP_RC"
-# Source user's standard environment first
-[ -f ~/.bashrc ] && source ~/.bashrc
-
-# ---------------------------------------------------------
-# MIMIC FILE EXPLORER: Change to the script's actual directory
-# ---------------------------------------------------------
-cd "$script_dir"
-
-# ---------------------------------------------------------
-# Auto-enter the Python venv located next to the script
-# ---------------------------------------------------------
-if [ -f "$script_dir/venv/bin/activate" ]; then
-    source "$script_dir/venv/bin/activate"
-    echo -e "\e[32m[GHOST] Python Venv Activated: \$VIRTUAL_ENV\e[0m"
-elif [ -f "\$PWD/venv/bin/activate" ]; then
-    source "\$PWD/venv/bin/activate"
-elif [ -f "\$HOME/venv/bin/activate" ]; then
-    source "\$HOME/venv/bin/activate"
-fi
-
-# Source this script to load all functions into the sub-shell
-source "$script_path" --source-only
-
-# Apply Dynamic AMD Overrides from mapping.json
-detect_and_override_gpu
-
-# Apply NVIDIA Spoofing Variables
-export CUDA_VERSION="12.4"
-export NVIDIA_VISIBLE_DEVICES="all"
-
-# Load Dynamic Patches from Wizard
-[ -f "\$HOME/.config/ghost_env_setup" ] && source "\$HOME/.config/ghost_env_setup"
-
-# Set VENV State and Prompt
-export GHOST_ENV_ACTIVE=1
-export PS1="\[\e[32m\](ghost-env)\[\e[0m\] \u@\h:\w$ "
-
-# BULLETPROOF LAUNCH COMMAND
-ghost-start() {
-    run_with_failover "\$@"
-}
-export -f ghost-start
-
-echo -e "\e[32m[GHOST] Environment Active. GPU Spoofed. GFX Masked via JSON.\e[0m"
-echo -e "\e[36m[GHOST] -> To run your AI with failover, type: \e[1mghost-start python3 your_script.py\e[0m"
-EOF
-
-    bash --rcfile "$TMP_RC"
-    rm -f "$TMP_RC"
-}
-
-# ==============================================================================
-# ZLUDA AUTO-INSTALLER / REPAIR ENGINE (COMMUNITY FORK EDITION)
+# PHASE 2: ZLUDA AUTO-INSTALLER & WIZARD
 # ==============================================================================
 
 install_zluda() {
-    echo -e "\e[36m[GHOST] Downloading Linux ZLUDA Engine (from Community Mirror)...\e[0m"
-    rm -rf "$HOME/.ghost/zluda"
-    mkdir -p "$HOME/.ghost/zluda"
+    echo -e "\e[36m[GHOST] Downloading Linux ZLUDA Engine...\e[0m"
+    rm -rf "$ZLUDA_DIR"
+    mkdir -p "$ZLUDA_DIR"
     
-    local tmp_tar="/tmp/zluda_latest.tar.gz"
-    
+    local tmp_tar="/tmp/zluda_latest_$$.tar.gz"
     local zluda_url=$(curl -s https://api.github.com/repos/lshqqytiger/ZLUDA/releases | grep -oP '"browser_download_url": "\K([^"]*linux[^"]*\.tar\.gz)(?=")' | head -n 1)
     [ -z "$zluda_url" ] && zluda_url="https://github.com/lshqqytiger/ZLUDA/releases/download/v3.0.0/ZLUDA-linux-amd64.tar.gz"
 
     if curl -f -L -# "$zluda_url" -o "$tmp_tar"; then
-        local file_size=$(du -h "$tmp_tar" | cut -f1)
-        
         if ! gzip -t "$tmp_tar" 2>/dev/null; then
-            echo -e "\e[31m[GHOST] CRITICAL ERROR: Downloaded file is corrupted (Not a valid GZIP).\e[0m"
+            echo -e "\e[31m[GHOST] CRITICAL ERROR: Downloaded file is corrupted.\e[0m"
             rm -f "$tmp_tar"
             return 1
         fi
 
-        echo -e "\e[36m[GHOST] Downloaded $file_size archive. Extracting...\e[0m"
+        echo -e "\e[36m[GHOST] Extracting ZLUDA...\e[0m"
         local tmp_ext="/tmp/zluda_ext_$$"
         mkdir -p "$tmp_ext"
         
         if tar -xzf "$tmp_tar" -C "$tmp_ext"; then
-            local top_dirs=$(find "$tmp_ext" -mindepth 1 -maxdepth 1 -type d | wc -l)
-            local top_files=$(find "$tmp_ext" -mindepth 1 -maxdepth 1 -type f | wc -l)
-            
-            if [ "$top_dirs" -eq 1 ] && [ "$top_files" -eq 0 ]; then
-                local nested=$(find "$tmp_ext" -mindepth 1 -maxdepth 1 -type d)
-                cp -a "$nested"/* "$HOME/.ghost/zluda/" 2>/dev/null
+            local nested=$(find "$tmp_ext" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            if [ -n "$nested" ]; then
+                cp -a "$nested"/* "$ZLUDA_DIR/" 2>/dev/null
             else
-                cp -a "$tmp_ext"/* "$HOME/.ghost/zluda/" 2>/dev/null
+                cp -a "$tmp_ext"/* "$ZLUDA_DIR/" 2>/dev/null
             fi
             rm -rf "$tmp_ext" "$tmp_tar"
 
-            local lib_found=$(find "$HOME/.ghost/zluda" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
-            if [ -n "$lib_found" ]; then
-                echo -e "\e[32m[GHOST] ZLUDA core libraries installed successfully.\e[0m"
+            # FIX 3: ZLUDA PATH PERMISSIONS (Explicitly make binaries executable)
+            chmod +x "$ZLUDA_DIR/zluda" 2>/dev/null
+            chmod +x "$ZLUDA_DIR"/libcuda.so* 2>/dev/null
+
+            if [ -f "$ZLUDA_DIR/libcuda.so" ] || [ -f "$ZLUDA_DIR/libcuda.so.1" ]; then
+                echo -e "\e[32m[GHOST] ZLUDA installed successfully.\e[0m"
             else
                 echo -e "\e[31m[GHOST] Warning: ZLUDA extracted, but core libraries are missing.\e[0m"
             fi
@@ -246,17 +218,13 @@ install_zluda() {
             rm -rf "$tmp_ext" "$tmp_tar"
         fi
     else
-        echo -e "\e[31m[GHOST] Warning: ZLUDA download failed (Network/HTTP Error).\e[0m"
+        echo -e "\e[31m[GHOST] CRITICAL: ZLUDA download failed.\e[0m"
         rm -f "$tmp_tar"
     fi
 }
 
-# ==============================================================================
-# PHASE 2: FIRST-STARTUP WIZARD & DYNAMIC PATCHING
-# ==============================================================================
-
 first_startup_wizard() {
-    mkdir -p "$HOME/.config" "$HOME/.ghost/zluda" "$HOME/.ghost/music"
+    mkdir -p "$CONFIG_DIR" "$ZLUDA_DIR" "$MUSIC_DIR"
     clear
     echo -e "\e[36m╔══════════════════════════════════════════════════════════╗\e[0m"
     echo -e "\e[36m║                 GHOST FIRST-STARTUP WIZARD               ║\e[0m"
@@ -278,14 +246,12 @@ first_startup_wizard() {
         4|*) target_port=8000; patch_logic="export GPU_MEMORY_UTILIZATION=0.90" ;;
     esac
 
-    echo "export GHOST_TARGET_PORT=$target_port" > "$HOME/.config/ghost_env_setup"
-    echo "$patch_logic" >> "$HOME/.config/ghost_env_setup"
+    echo "export GHOST_TARGET_PORT=$target_port" > "$CONFIG_FILE"
+    echo "$patch_logic" >> "$CONFIG_FILE"
 
-    local zluda_lib=$(find "$HOME/.ghost/zluda" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
+    local zluda_lib=$(find "$ZLUDA_DIR" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
     if [ -z "$zluda_lib" ]; then
         install_zluda
-    else
-        echo -e "\e[32m[GHOST] Existing ZLUDA installation found.\e[0m"
     fi
 
     echo -e "\e[32m[GHOST] Initialization complete.\e[0m"
@@ -293,7 +259,7 @@ first_startup_wizard() {
 }
 
 # ==============================================================================
-# PHASE 4: THE WAITING ROOM TUI (DOOM & MUSIC MANAGER)
+# PHASE 3: MEDIA & DOOM (LINUX NATIVE)
 # ==============================================================================
 
 MUSIC_PID=""
@@ -304,88 +270,6 @@ stop_music() {
         MUSIC_PID=""
     fi
     pkill -15 -f "mpg123.*Ghost_" 2>/dev/null
-}
-
-local_music_menu() {
-    clear
-    echo -e "\e[36m╔══════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "\e[36m║                LOCAL MUSIC LIBRARY                       ║\e[0m"
-    echo -e "\e[36m╠══════════════════════════════════════════════════════════╣\e[0m"
-    
-    local files=()
-    local i=1
-    for f in "$HOME/.ghost/music/"*.mp3; do
-        if [ -f "$f" ]; then
-            files+=("$f")
-            local fname=$(basename "$f")
-            local str="[$i] $fname"
-            local pad_len=$(( 52 - ${#str} ))
-            [ $pad_len -lt 0 ] && pad_len=0
-            local spaces=$(printf '%*s' "$pad_len" '')
-            echo -e "\e[36m║ \e[32m[$i]\e[36m $fname${spaces}║\e[0m"
-            ((i++))
-        fi
-    done
-    
-    if [ ${#files[@]} -eq 0 ]; then
-        echo -e "\e[36m║ \e[31mNo downloaded music found.                               \e[36m║\e[0m"
-    fi
-    
-    echo -e "\e[36m║ \e[31m[R]\e[36m Return to Waiting Room                               ║\e[0m"
-    echo -e "\e[36m╚══════════════════════════════════════════════════════════╝\e[0m"
-    
-    read -n 1 -s sel
-    if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -gt 0 ] && [ "$sel" -le "${#files[@]}" ]; then
-        local chosen="${files[$((sel-1))]}"
-        export GHOST_MUSIC_TRACK="$chosen"
-        sed -i '/GHOST_MUSIC_TRACK/d' "$HOME/.config/ghost_env_setup" 2>/dev/null
-        echo "export GHOST_MUSIC_TRACK=\"$chosen\"" >> "$HOME/.config/ghost_env_setup"
-        stop_music
-        toggle_music
-    fi
-}
-
-music_menu() {
-    clear
-    echo -e "\e[36m╔══════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "\e[36m║                GHOST MUSIC DOWNLOADER                    ║\e[0m"
-    echo -e "\e[36m╠══════════════════════════════════════════════════════════╣\e[0m"
-    echo -e "\e[36m║ \e[32m[1]\e[36m Download Upbeat Electronic Track                     ║\e[0m"
-    echo -e "\e[36m║ \e[32m[2]\e[36m Download Chill Groove Track                          ║\e[0m"
-    echo -e "\e[36m║ \e[32m[3]\e[36m Download Driving Synth Track                         ║\e[0m"
-    echo -e "\e[36m║ \e[32m[4]\e[36m Download Default Elevator Music                      ║\e[0m"
-    echo -e "\e[36m║ \e[32m[5]\e[36m Select from Local Library                            ║\e[0m"
-    echo -e "\e[36m║ \e[31m[R]\e[36m Return to Waiting Room                               ║\e[0m"
-    echo -e "\e[36m╚══════════════════════════════════════════════════════════╝\e[0m"
-    
-    read -n 1 -s choice
-    local url=""
-    local filename=""
-    
-    case "$choice" in
-        1) url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"; filename="Ghost_Track_1.mp3" ;;
-        2) url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"; filename="Ghost_Track_2.mp3" ;;
-        3) url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"; filename="Ghost_Track_3.mp3" ;;
-        4) url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"; filename="Ghost_Track_4.mp3" ;;
-        5) local_music_menu; return ;;
-        r|R) return ;;
-        *) return ;;
-    esac
-
-    echo -e "\n\e[33mDownloading $filename...\e[0m"
-    mkdir -p "$HOME/.ghost/music"
-    
-    if curl -f -L -# "$url" -o "$HOME/.ghost/music/$filename"; then
-        export GHOST_MUSIC_TRACK="$HOME/.ghost/music/$filename"
-        sed -i '/GHOST_MUSIC_TRACK/d' "$HOME/.config/ghost_env_setup" 2>/dev/null
-        echo "export GHOST_MUSIC_TRACK=\"$HOME/.ghost/music/$filename\"" >> "$HOME/.config/ghost_env_setup"
-        
-        stop_music
-        toggle_music
-    else
-        echo -e "\e[31m[GHOST] Download failed! Network error.\e[0m"
-        sleep 2
-    fi
 }
 
 toggle_music() {
@@ -403,14 +287,13 @@ toggle_music() {
     if [ -n "$MUSIC_PID" ] && kill -0 "$MUSIC_PID" 2>/dev/null; then
         stop_music
     else
-        local track="${GHOST_MUSIC_TRACK:-$HOME/.ghost/music/Ghost_Track_4.mp3}"
+        mkdir -p "$MUSIC_DIR"
+        local track="$MUSIC_DIR/Ghost_Track_4.mp3"
         
         if [ ! -f "$track" ] || [ $(stat -c%s "$track" 2>/dev/null || echo 0) -lt 100000 ]; then
             clear
-            echo -e "\e[36m[GHOST] First time playing music. Downloading default track...\e[0m"
-            mkdir -p "$HOME/.ghost/music"
-            curl -f -L -s "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" -o "$HOME/.ghost/music/Ghost_Track_4.mp3"
-            track="$HOME/.ghost/music/Ghost_Track_4.mp3"
+            echo -e "\e[36m[GHOST] Downloading default music...\e[0m"
+            curl -f -L -s "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" -o "$track"
         fi
         
         set +m
@@ -422,9 +305,8 @@ toggle_music() {
 }
 
 launch_doom() {
-    local doom_dir="$HOME/.ghost/doom"
-    local doom_bin="$doom_dir/doom-ascii"
-    local doom_wad="$doom_dir/DOOM1.WAD"
+    local doom_bin="$DOOM_DIR/doom-ascii"
+    local doom_wad="$DOOM_DIR/DOOM1.WAD"
     local original_dir=$(pwd)
     local log_file=$1
     local config_port=$2
@@ -438,15 +320,15 @@ launch_doom() {
 
         clear
         echo -e "\e[33m[GHOST] Automating local DOOM installation...\e[0m"
-        mkdir -p "$doom_dir"
-        cd "$doom_dir" || return
+        mkdir -p "$DOOM_DIR"
+        cd "$DOOM_DIR" || return
 
         if [ ! -f "$doom_wad" ]; then
             echo -e "\e[36m[GHOST] Downloading DOOM Shareware WAD...\e[0m"
-            curl -L -# "https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad" -o DOOM1.WAD
+            curl -L -# "https://archive.org/download/2020_03_22_DOOM/DOOM%20WADs/DOOM1.WAD" -o DOOM1.WAD
         fi
 
-        echo -e "\e[36m[GHOST] Compiling doom-ascii engine (64-bit aligned)...\e[0m"
+        echo -e "\e[36m[GHOST] Compiling doom-ascii engine...\e[0m"
         rm -rf src
         git clone https://github.com/wojciech-graj/doom-ascii.git src
         cd src || return
@@ -461,7 +343,6 @@ launch_doom() {
         fi
         
         local compiled_bin=$(find . -type f -name "doom-ascii" -executable | head -n 1)
-        
         if [ -n "$compiled_bin" ]; then
             cp "$compiled_bin" "$doom_bin"
             chmod +x "$doom_bin"
@@ -470,24 +351,13 @@ launch_doom() {
             echo -e "\e[32m[GHOST] doom-ascii built successfully!\e[0m"
             sleep 1
         else
-            clear
-            echo -e "\e[31m[GHOST] DOOM compiled, but binary was not found!\e[0m"
-            sleep 5
             cd "$original_dir"
             return
         fi
     fi
 
-    cd "$doom_dir" || return
-    
-    if [ ! -f "$doom_bin" ]; then
-        echo -e "\e[31m[GHOST] CRITICAL: doom-ascii binary is missing!\e[0m"
-        sleep 3
-        cd "$original_dir"
-        return
-    fi
-
-    local launch_cmd="cd \"$doom_dir\" && export LINES=35 COLUMNS=100 && ( while true; do if grep -qiE 'running on local url|uvicorn running on|starting web server|http://(127\.0\.0\.1|0\.0\.0\.0|localhost):[0-9]+' \"$log_file\" 2>/dev/null || ss -tulnp 2>/dev/null | grep -q \":$config_port \"; then killall -9 doom-ascii 2>/dev/null; exit; fi; sleep 1; done ) & exec \"$doom_bin\" -iwad \"$doom_wad\""
+    cd "$DOOM_DIR" || return
+    local launch_cmd="cd \"$DOOM_DIR\" && export LINES=35 COLUMNS=100 && ( while true; do if grep -qiE 'running on local url|uvicorn running on|starting web server|http://(127\.0\.0\.1|0\.0\.0\.0|localhost):[0-9]+' \"$log_file\" 2>/dev/null || ss -tulnp 2>/dev/null | grep -q \":$config_port \"; then killall -9 doom-ascii 2>/dev/null; exit; fi; sleep 1; done ) & exec \"$doom_bin\" -iwad \"$doom_wad\""
     
     if command -v gnome-terminal >/dev/null 2>&1; then
         gnome-terminal --full-screen -- bash -c "$launch_cmd"
@@ -497,14 +367,13 @@ launch_doom() {
         konsole --fullscreen -e bash -c "$launch_cmd"
     elif command -v xterm >/dev/null 2>&1; then
         xterm -fullscreen -e bash -c "$launch_cmd" &
-    else
-        clear
-        echo -e "\e[31m[GHOST] No supported terminal emulator found to launch DOOM.\e[0m"
-        sleep 3
     fi
-    
     cd "$original_dir" || return
 }
+
+# ==============================================================================
+# PHASE 4: THE WAITING ROOM TUI & SMART FAILOVER
+# ==============================================================================
 
 waiting_room() {
     local config_port=$1
@@ -512,32 +381,35 @@ waiting_room() {
     local mode_flag=$3
     local log_file=$4
     local dynamic_port=""
+    local start_time=$(date +%s)
 
     pad_line() {
         local str="$1"
-        local str_len=${#str}
-        local pad_len=$(( 56 - str_len ))
+        local color="$2"
+        local clean_str=$(echo "$str" | sed -r "s/\x1B\[[0-9;]*[a-zA-Z]//g")
+        local pad_len=$(( 56 - ${#clean_str} ))
         [ $pad_len -lt 0 ] && pad_len=0
         local spaces=$(printf '%*s' "$pad_len" '')
-        echo -e "\e[36m║  ${str}${spaces}║\e[0m"
+        echo -e "\e[36m║  ${color}${str}${spaces}\e[36m║\e[0m"
     }
 
     local hw_file=$(mktemp)
-    echo "N/A N/A" > "$hw_file"
+    echo "N/A" > "$hw_file"
     
     set +m
     (
         while kill -0 "$app_pid" 2>/dev/null; do
-            local rocm_out=$(rocm-smi --showtemp --showmemuse 2>/dev/null)
+            local rocm_out=$(rocm-smi --showtemp 2>/dev/null)
             local temp_raw=$(echo "$rocm_out" | grep -i "edge" | grep -oP '\d+\.\d+' | head -1)
             [ -z "$temp_raw" ] && temp_raw=$(echo "$rocm_out" | grep -oP '\d+\.\d+' | head -1)
-            local vram_raw=$(echo "$rocm_out" | grep -i "vram" | grep -oP '\d+' | tail -1)
-            echo "${temp_raw:-N/A} ${vram_raw:-N/A}" > "$hw_file"
+            echo "${temp_raw:-N/A}" > "$hw_file"
             sleep 1
         done
     ) >/dev/null 2>&1 &
     local poller_pid=$!
     set -m
+
+    tput civis
 
     while true; do
         if ! kill -0 "$app_pid" 2>/dev/null; then
@@ -555,14 +427,37 @@ waiting_room() {
             stop_music
             killall -9 doom-ascii 2>/dev/null
             pkill -9 -x doom-ascii 2>/dev/null
+            tput cnorm
             clear
             break
         fi
 
-        read temp_val vram_val < "$hw_file"
+        local current_time=$(date +%s)
+        local elapsed=$((current_time - start_time))
+
+        if [ $elapsed -gt 600 ]; then
+            tput cnorm
+            clear
+            echo -e "\n\e[31m[GHOST] CRITICAL ERROR: AI Model failed to initialize within 10 minutes.\e[0m"
+            echo -e "\e[33m[GHOST] Possible Shader Compilation Hang or Silent CUDA Error.\e[0m"
+            kill -9 "$app_pid" 2>/dev/null
+            break
+        fi
+
+        if [ $elapsed -gt 30 ]; then
+            if [ ! -s "$log_file" ]; then
+                tput cnorm
+                clear
+                echo -e "\n\e[31m[GHOST] CRITICAL ERROR: No output detected for 30 seconds.\e[0m"
+                echo -e "\e[33m[GHOST] Possible Python shim conflict or silent crash.\e[0m"
+                kill -9 "$app_pid" 2>/dev/null
+                break
+            fi
+        fi
+
+        read temp_val < "$hw_file"
         local temp="${temp_val}"
-        local vram="N/A"
-        [ "$vram_val" != "N/A" ] && vram="${vram_val}%"
+        local vram="${GHOST_VRAM_GB:-N/A}"
 
         local display_port="${dynamic_port:-$config_port (Wait)}"
         local status_str="STATUS: BOOTING AI MODEL / PORT: $display_port"
@@ -570,74 +465,73 @@ waiting_room() {
         
         local short_spoof=$(echo "${GHOST_SPOOF_NAME:-RTX 4090}" | sed 's/NVIDIA GeForce //')
         local gpu_str="[ GPU: Spoofed as $short_spoof ]"
-        local mask_str="[ GFX MASK: Active ]"
-        
-        local hw_left="[ TEMP: ${temp}C ]"
-        local hw_right="[ VRAM: ${vram} ]"
-        local hw_combined="${hw_left}             ${hw_right}"
+        local hw_combined="[ TEMP: ${temp}C ]             [ VRAM: ${vram} ]"
 
         local backend_str=""
+        local backend_color="\e[36m"
         if [ "$mode_flag" == "ZLUDA" ]; then
             backend_str="[ BACKEND: Failover Detected -> ZLUDA Active ]"
+            backend_color="\e[33m"
         else
             backend_str="[ BACKEND: ROCm Native -> Monitoring for failover ]"
         fi
 
-        clear
+        tput cup 0 0
         echo -e "\e[36m╔══════════════════════════════════════════════════════════╗\e[0m"
-        echo -e "\e[36m║                 \e[32mGHOST ENVIRONMENT (v2.0)\e[36m                 ║\e[0m"
+        echo -e "\e[36m║                 \e[32mGHOST ENVIRONMENT (v2.8)\e[36m                 ║\e[0m"
         echo -e "\e[36m╠══════════════════════════════════════════════════════════╣\e[0m"
-        pad_line "$status_str"
-        pad_line ""
-        pad_line "$gpu_str  $mask_str"
-        pad_line "$hw_combined"
-        if [ "$mode_flag" == "ZLUDA" ]; then
-            pad_line "$(echo -e "\e[33m$backend_str\e[36m")"
-        else
-            pad_line "$backend_str"
-        fi
+        pad_line "$status_str" "\e[36m"
+        pad_line "" "\e[36m"
+        pad_line "$gpu_str" "\e[36m"
+        pad_line "$hw_combined" "\e[36m"
+        pad_line "$backend_str" "$backend_color"
         echo -e "\e[36m╠══════════════════════════════════════════════════════════╣\e[0m"
         echo -e "\e[36m║  HOTKEYS:                                                ║\e[0m"
-        pad_line "[D] DOOM (Autosaves)   [M] Toggle Music   [N] Music Menu"
+        pad_line "[D] Play DOOM          [M] Toggle Music" "\e[36m"
         echo -e "\e[36m╚══════════════════════════════════════════════════════════╝\e[0m"
 
-        local start_time=$(date +%s)
-        read -t 1 -n 1 -s key
-        local end_time=$(date +%s)
-        if [ $((end_time - start_time)) -eq 0 ] && [ -z "$key" ]; then
-            sleep 1
-        fi
-        
+        read -t 0.5 -n 1 -s key
         case "$key" in
             m|M) toggle_music ;;
-            n|N) music_menu ;;
             d|D) launch_doom "$log_file" "$config_port" ;;
         esac
     done
 
     kill -9 "$poller_pid" 2>/dev/null
     rm -f "$hw_file"
+    tput cnorm
 }
 
 # ==============================================================================
-# PHASE 3: SMART EXECUTION LOGIC (ROCm Native -> ZLUDA Failover)
+# PHASE 5: SMART EXECUTION LOGIC (ROCm Native -> ZLUDA Failover)
 # ==============================================================================
 
 run_with_failover() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo -e "\n\e[31m[GHOST] CRITICAL ERROR: Executable '$1' not found.\e[0m"
+        echo -e "\e[33m[GHOST] Please verify it is installed and in your PATH.\e[0m"
+        return 1
+    fi
+
     local target_port=${GHOST_TARGET_PORT:-7860}
-    local log_file=$(mktemp)
+    local log_out="/tmp/ghost_ai_out_$$.log"
+    local log_err="/tmp/ghost_ai_err_$$.log"
     local user_aborted=0
+
+    rm -f "$log_out" "$log_err"
 
     trap 'user_aborted=1; stop_music; killall -9 doom-ascii 2>/dev/null; pkill -9 -x doom-ascii 2>/dev/null; kill -9 $app_pid 2>/dev/null' SIGINT
 
-    "$@" < /dev/null > "$log_file" 2>&1 &
+    echo -e "\e[36m[GHOST] Attempting Native Execution...\e[0m"
+
+    "$@" > "$log_out" 2> "$log_err" &
     local app_pid=$!
 
-    waiting_room "$target_port" "$app_pid" "ROCM" "$log_file"
+    waiting_room "$target_port" "$app_pid" "ROCM" "$log_out"
 
     if [ $user_aborted -eq 1 ]; then
         echo -e "\n\e[33m[GHOST] Process aborted by user.\e[0m"
-        rm -f "$log_file"
+        rm -f "$log_out" "$log_err"
         trap - SIGINT
         return 130
     fi
@@ -646,49 +540,54 @@ run_with_failover() {
     if ! kill -0 "$app_pid" 2>/dev/null; then
         wait "$app_pid" 2>/dev/null
         local exit_code=$?
-        if [ $exit_code -gt 0 ] || grep -qE "No HIP backend|CUDA out of memory|Torch not compiled with ROCm" "$log_file"; then
-            needs_failover=1
+        
+        sleep 0.5
+        
+        if [ $exit_code -ne 0 ]; then
+            if grep -qE "No HIP backend|CUDA out of memory|Torch not compiled with ROCm" "$log_err" "$log_out" 2>/dev/null; then
+                needs_failover=1
+            fi
         fi
     fi
 
     if [ $needs_failover -eq 1 ]; then
-        rm -f "$log_file"
+        rm -f "$log_out" "$log_err"
 
-        local zluda_lib=$(find "$HOME/.ghost/zluda" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
+        local zluda_lib=$(find "$ZLUDA_DIR" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
         if [ -z "$zluda_lib" ]; then
             install_zluda
-            zluda_lib=$(find "$HOME/.ghost/zluda" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
+            zluda_lib=$(find "$ZLUDA_DIR" ! -type d \( -name "libcuda.so*" -o -name "*zluda*" \) 2>/dev/null | head -n 1)
         fi
 
         if [ -n "$zluda_lib" ]; then
             local zluda_dir=$(dirname "$zluda_lib")
             
-            LD_LIBRARY_PATH="$zluda_dir:$LD_LIBRARY_PATH" LD_PRELOAD="$zluda_lib" "$@" < /dev/null > "$log_file" 2>&1 &
+            LD_LIBRARY_PATH="$zluda_dir:$LD_LIBRARY_PATH" LD_PRELOAD="$zluda_lib" "$@" > "$log_out" 2> "$log_err" &
             app_pid=$!
 
-            waiting_room "$target_port" "$app_pid" "ZLUDA" "$log_file"
+            waiting_room "$target_port" "$app_pid" "ZLUDA" "$log_out"
             
             if [ $user_aborted -eq 1 ]; then
                 echo -e "\n\e[33m[GHOST] Process aborted by user.\e[0m"
-                rm -f "$log_file"
+                rm -f "$log_out" "$log_err"
                 trap - SIGINT
                 return 130
             fi
         else
             clear
             echo -e "\e[31m[GHOST] CRITICAL: ZLUDA auto-repair failed. Cannot failover.\e[0m"
-            cat "$log_file"
-            rm -f "$log_file"
+            [ -f "$log_err" ] && cat "$log_err"
+            rm -f "$log_out" "$log_err"
             stop_music
             return 1
         fi
     fi
 
     clear
-    cat "$log_file"
+    [ -f "$log_out" ] && cat "$log_out"
     
     if kill -0 "$app_pid" 2>/dev/null; then
-        tail -f "$log_file" &
+        tail -f "$log_out" "$log_err" 2>/dev/null &
         local tail_pid=$!
         
         trap 'kill -INT $app_pid 2>/dev/null' SIGINT
@@ -698,7 +597,15 @@ run_with_failover() {
         kill -9 "$tail_pid" 2>/dev/null
     fi
 
-    rm -f "$log_file"
+    wait "$app_pid" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        rm -f "$log_out" "$log_err"
+    else
+        echo -e "\n\e[33m[GHOST] Process crashed. Full logs preserved at:\e[0m"
+        echo -e "\e[90mOUT: $log_out\e[0m"
+        echo -e "\e[90mERR: $log_err\e[0m"
+    fi
+    
     stop_music
 }
 
@@ -711,12 +618,54 @@ if [ "$1" == "--source-only" ]; then
 fi
 
 if [ "$1" == "install" ]; then
-    install_ghost
+    echo -e "\e[36m[GHOST]\e[0m Installing Ghost Environment globally..."
+    sudo ln -sf "$(realpath "$0")" /usr/local/bin/ghost
+    echo -e "\e[32m[GHOST] Installation complete. Type 'ghost' to enter the sandbox.\e[0m"
     exit 0
 fi
 
 if [ -z "$GHOST_ENV_ACTIVE" ]; then
-    enter_ghost_env
+    echo -e "\e[36m[GHOST]\e[0m Initializing Virtual Environment..."
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        first_startup_wizard
+    fi
+
+    local script_path="$(realpath "$0")"
+    local script_dir="$(dirname "$script_path")"
+    local TMP_RC=$(mktemp)
+
+    cat << EOF > "$TMP_RC"
+[ -f ~/.bashrc ] && source ~/.bashrc
+cd "$script_dir"
+
+if [ -f "$script_dir/venv/bin/activate" ]; then
+    source "$script_dir/venv/bin/activate"
+    echo -e "\e[32m[GHOST] Python Venv Activated: \$VIRTUAL_ENV\e[0m"
+elif [ -f "\$PWD/venv/bin/activate" ]; then
+    source "\$PWD/venv/bin/activate"
+elif [ -f "\$HOME/venv/bin/activate" ]; then
+    source "\$HOME/venv/bin/activate"
+fi
+
+source "$script_path" --source-only
+detect_and_override_gpu
+[ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
+
+export GHOST_ENV_ACTIVE=1
+export PS1="\[\e[32m\](ghost-env)\[\e[0m\] \u@\h:\w$ "
+
+ghost-start() {
+    run_with_failover "\$@"
+}
+export -f ghost-start
+
+echo -e "\e[32m[GHOST] Environment Active. GPU Spoofed. GFX Masked via JSON.\e[0m"
+echo -e "\e[36m[GHOST] -> To run your AI with failover, type: \e[1mghost-start python3 your_script.py\e[0m"
+EOF
+
+    bash --rcfile "$TMP_RC"
+    rm -f "$TMP_RC"
 else
     if [ $# -gt 0 ]; then
         "$@"
