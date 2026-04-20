@@ -37,7 +37,7 @@ The internal lookup table (mapping.json) provides dynamic translation logic acro
 | **RX 7000 Series** | 11.0.0 | NVIDIA GeForce RTX 4090 |
 | **RX 6000 Series** | 10.3.0 | NVIDIA GeForce RTX 3090 Ti |
 | **RX 5000 Series** | 10.1.0 | NVIDIA GeForce RTX 2080 Ti |
-
+| **MI50** | 9.0.6 | NVIDIA Tesla A100 |
 *(Note: GFX Version on RDNA 4 cards has been masked from 12.0 to 11.0. This is because the architecture is too new, and many AI libraries currently lack native support. Masking to 11.0 ensures maximum compatibility.)*
 
 ## Key Features
