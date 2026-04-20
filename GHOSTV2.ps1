@@ -1,3 +1,5 @@
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 <#
 .SYNOPSIS
     AMD Ghost Environment (Windows Native Port v2.0 - Hardened)
