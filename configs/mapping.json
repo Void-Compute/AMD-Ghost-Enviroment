@@ -3,6 +3,8 @@
   "7000": { "mask": "11.0.0", "spoof": "NVIDIA GeForce RTX 4090" },
   "6000": { "mask": "10.3.0", "spoof": "NVIDIA GeForce RTX 3090 Ti" },
   "5000": { "mask": "10.1.0", "spoof": "NVIDIA GeForce RTX 2080 Ti" },
-  "MI50": { "mask": "9.0.6", "spoof": "NVIDIA Tesla V100" }
-  "UNKNOWN": { "mask": "11.0.0", "spoof": "NVIDIA GeForce RTX 4090" }
+  "VEGA64": { "mask": "9.0.0", "spoof": "NVIDIA Tesla P100" },
+  "VEGA56": { "mask": "9.0.0", "spoof": "NVIDIA Tesla P100" },
+  "MI50": { "mask": "9.0.6", "spoof": "NVIDIA Tesla V100" },
+  "DEFAULT": { "mask": "11.0.0", "spoof": "NVIDIA GeForce RTX 4090" }
 }
