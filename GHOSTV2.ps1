@@ -1,4 +1,4 @@
-﻿<#
+﻿﻿<#
 .SYNOPSIS
     AMD Ghost Environment (Consumer Edition v2.7 - Final Master)
 .DESCRIPTION
