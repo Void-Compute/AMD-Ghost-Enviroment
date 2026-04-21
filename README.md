@@ -146,7 +146,7 @@ If the global installation failed, you can run it via absolute path:
 ## Technical Architecture
 The ghost daemon utilizes the following primary variables and techniques to achieve hardware parity:
 * **HSA_OVERRIDE_GFX_VERSION**: Defines the target AMD architecture for ROCm compatibility.
-* **HSA_ENABLE_SDMA=0**: Disables PCIe atomics to prevent crashes on newer RDNA architectures.
+* **HSA_ENABLE_SDMA=0**: Disables PCIe atomics to prevent crashes on newer RDNA architectures.(Only 9000 series)
 * **LD_PRELOAD Injection (Linux) / PATH Injection (Windows)**: Dynamically injects ZLUDA into the Python process tree, intercepting CUDA calls and translating them to AMD HIP in real-time.
 * **PTY Isolation**: Uses Pseudo-Terminals (Linux) and hidden process redirection (Windows) to isolate background processes, ensuring the TUI and DOOM have raw, uninterrupted access to keyboard inputs.
 
