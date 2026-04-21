@@ -1,4 +1,4 @@
-﻿﻿<#
+﻿<#
 .SYNOPSIS
     AMD Ghost Environment (Consumer Edition v2.7 - Final Master)
 .DESCRIPTION
@@ -212,9 +212,9 @@ function Run-Wizard {
     if (-not (Test-Path $ConfigDir)) { New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null; }
     
     Clear-Host;
-    Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Cyan;
-    Write-Host "║                 GHOST FIRST-STARTUP WIZARD               ║" -ForegroundColor Cyan;
-    Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Cyan;
+    Write-Host "+**************************************************+" -ForegroundColor Cyan;
+    Write-Host "*              GHOST FIRST-STARTUP WIZARD              *" -ForegroundColor Cyan;
+    Write-Host "+**************************************************+" -ForegroundColor Cyan;
     Write-Host "Welcome to Ghost. What tool are you initializing?";
     Write-Host " (1) SwarmUI";
     Write-Host " (2) SD.Next";
@@ -438,24 +438,24 @@ function Show-WaitingRoom {
         $status = $status.PadRight(54);
         [Console]::SetCursorPosition(0, 0);
         
-        Write-Host ("╔══════════════════════════════════════════════════════════╗" + $clearSpace) -ForegroundColor Cyan;
-        Write-Host "║                 " -NoNewline -ForegroundColor Cyan; Write-Host "GHOST ENVIRONMENT (v2.7)" -NoNewline -ForegroundColor Green; Write-Host ("                 ║" + $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("╠══════════════════════════════════════════════════════════╣" + $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║  {0,-56}║{1}" -f $status, $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║                                                          ║{0}" -f $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║  {0,-56}║{1}" -f "[ GPU: Spoofed as $spoof ]", $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║  {0,-56}║{1}" -f "[ TEMP: $temp ][ VRAM: $trueVram ]", $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("+**************************************************+" + $clearSpace) -ForegroundColor Cyan;
+        Write-Host "*                 " -NoNewline -ForegroundColor Cyan; Write-Host "GHOST ENVIRONMENT (v2.7)" -NoNewline -ForegroundColor Green; Write-Host ("                 *" + $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("+==================================================+" + $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*  {0,-56}*{1}" -f $status, $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*                                                          *{0}" -f $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*  {0,-56}*{1}" -f "[ GPU: Spoofed as $spoof ]", $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*  {0,-56}*{1}" -f "[ TEMP: $temp ][ VRAM: $trueVram ]", $clearSpace) -ForegroundColor Cyan;
         
         if ($ModeFlag -eq "ZLUDA") {
-            Write-Host "║  " -NoNewline -ForegroundColor Cyan; Write-Host ("{0,-56}" -f $backend) -NoNewline -ForegroundColor Yellow; Write-Host ("║" + $clearSpace) -ForegroundColor Cyan;
+            Write-Host "*  " -NoNewline -ForegroundColor Cyan; Write-Host ("{0,-56}" -f $backend) -NoNewline -ForegroundColor Yellow; Write-Host ("*" + $clearSpace) -ForegroundColor Cyan;
         } else {
-            Write-Host ("║  {0,-56}║{1}" -f $backend, $clearSpace) -ForegroundColor Cyan;
+            Write-Host ("*  {0,-56}*{1}" -f $backend, $clearSpace) -ForegroundColor Cyan;
         }
         
-        Write-Host ("╠══════════════════════════════════════════════════════════╣" + $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║  HOTKEYS:                                                ║{0}" -f $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("║  {0,-56}║{1}" -f "[D] Play DOOM          [M] Toggle Music", $clearSpace) -ForegroundColor Cyan;
-        Write-Host ("╚══════════════════════════════════════════════════════════╝" + $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("+==================================================+" + $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*  HOTKEYS:                                                *{0}" -f $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("*  {0,-56}*{1}" -f "[D] Play DOOM          [M] Toggle Music", $clearSpace) -ForegroundColor Cyan;
+        Write-Host ("+**************************************************+" + $clearSpace) -ForegroundColor Cyan;
 
         if ([console]::KeyAvailable) {
             $key = [console]::ReadKey($true).Character;
