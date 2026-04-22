@@ -166,7 +166,7 @@ function Set-GhostEnvironment {
 # ==============================================================================
 
 
-    function Install-Zluda {
+function Install-Zluda {
     Write-Host "[GHOST] Downloading Windows ZLUDA Engine..." -ForegroundColor Cyan;
     
     # FIX 1: THE ZOMBIE KILLER (Free up locked files)
@@ -231,25 +231,6 @@ function Set-GhostEnvironment {
         }
     } catch {
         Write-Host "[GHOST] CRITICAL: Failed to extract ZLUDA archive. Check disk space or permissions." -ForegroundColor Red;
-    }
-}
-
-    if (-not $down
-    
-    Write-Host "[GHOST] Extracting ZLUDA..." -ForegroundColor Cyan;
-    Expand-Archive -Path $zipPath -DestinationPath $ZludaDir -Force;
-    Remove-Item $zipPath -ErrorAction SilentlyContinue;
-
-    $extractedExe = Get-ChildItem -Path $ZludaDir -Filter "zluda.exe" -Recurse | Select-Object -First 1;
-    if ($extractedExe -and $extractedExe.DirectoryName -ne $ZludaDir) {
-        Move-Item -Path "$($extractedExe.DirectoryName)\*" -Destination $ZludaDir -Force;
-        Remove-Item -Recurse -Force $extractedExe.DirectoryName;
-    }
-
-    if (Test-Path "$ZludaDir\zluda.exe") {
-        Write-Host "[GHOST] ZLUDA installed successfully." -ForegroundColor Green;
-    } else {
-        Write-Host "[GHOST] CRITICAL: ZLUDA extraction failed." -ForegroundColor Red;
     }
 }
 
