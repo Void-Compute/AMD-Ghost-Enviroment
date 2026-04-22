@@ -165,12 +165,30 @@ function Set-GhostEnvironment {
 # PHASE 2: ZLUDA AUTO-INSTALLER & WIZARD
 # ==============================================================================
 
-function Install-Zluda {
-    Write-Host "[GHOST] Downloading Windows ZLUDA Engine..." -ForegroundColor Cyan;
-    if (Test-Path $ZludaDir) { Remove-Item -Recurse -Force $ZludaDir; }
-    New-Item -ItemType Directory -Force -Path $ZludaDir | Out-Null;
 
+    function Install-Zluda {
+    Write-Host "[GHOST] Downloading Windows ZLUDA Engine..." -ForegroundColor Cyan;
+    
+    # FIX 1: THE ZOMBIE KILLER (Free up locked files)
+    Stop-Process -Name "zluda" -Force -ErrorAction SilentlyContinue;
+    Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue;
+    Start-Sleep -Milliseconds 500;
+    
+    try {
+        if (Test-Path $ZludaDir) { Remove-Item -Recurse -Force $ZludaDir -ErrorAction Stop; }
+        New-Item -ItemType Directory -Force -Path $ZludaDir -ErrorAction Stop | Out-Null;
+    } catch {
+        Write-Host "[GHOST] CRITICAL: Failed to clean ZLUDA directory. A file is locked by another program." -ForegroundColor Red;
+        Write-Host "[GHOST] Please restart your computer and try again." -ForegroundColor Yellow;
+        return;
+    }
+
+    # FIX 2: THE TLS ENFORCER (Fixes GitHub connection on older Windows 10)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+
+    # FIX 3: TEMP DIRECTORY BYPASS (Avoids permission conflicts)
     $zipPath = "$env:TEMP\zluda_latest_$PID.zip";
+    $extractPath = "$env:TEMP\zluda_extract_$PID";
     
     $mirrors = @(
         "https://github.com/lshqqytiger/ZLUDA/releases/download/v3.0.0/ZLUDA-windows-amd64.zip",
@@ -180,16 +198,43 @@ function Install-Zluda {
     $downloaded = $false;
     foreach ($url in $mirrors) {
         try {
-            Invoke-WebRequest -Uri $url -OutFile $zipPath -ErrorAction Stop;
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -ErrorAction Stop;
             $downloaded = $true;
             break;
         } catch { continue; }
     }
 
     if (-not $downloaded) {
-        Write-Host "[GHOST] CRITICAL: All ZLUDA mirrors failed. Check your internet connection." -ForegroundColor Red;
+        Write-Host "[GHOST] CRITICAL: All ZLUDA mirrors failed. Check your internet connection or firewall." -ForegroundColor Red;
         return;
     }
+    
+    Write-Host "[GHOST] Extracting ZLUDA..." -ForegroundColor Cyan;
+    try {
+        if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath -ErrorAction SilentlyContinue; }
+        New-Item -ItemType Directory -Force -Path $extractPath | Out-Null;
+        
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force -ErrorAction Stop;
+        Remove-Item $zipPath -ErrorAction SilentlyContinue;
+
+        $extractedExe = Get-ChildItem -Path $extractPath -Filter "zluda.exe" -Recurse | Select-Object -First 1;
+        if ($extractedExe) {
+            Move-Item -Path "$($extractedExe.DirectoryName)\*" -Destination $ZludaDir -Force -ErrorAction Stop;
+        }
+
+        Remove-Item -Recurse -Force $extractPath -ErrorAction SilentlyContinue;
+
+        if (Test-Path "$ZludaDir\zluda.exe") {
+            Write-Host "[GHOST] ZLUDA installed successfully." -ForegroundColor Green;
+        } else {
+            Write-Host "[GHOST] CRITICAL: ZLUDA extraction failed. Executable not found." -ForegroundColor Red;
+        }
+    } catch {
+        Write-Host "[GHOST] CRITICAL: Failed to extract ZLUDA archive. Check disk space or permissions." -ForegroundColor Red;
+    }
+}
+
+    if (-not $down
     
     Write-Host "[GHOST] Extracting ZLUDA..." -ForegroundColor Cyan;
     Expand-Archive -Path $zipPath -DestinationPath $ZludaDir -Force;
