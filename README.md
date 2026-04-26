@@ -1,4 +1,4 @@
-```
+
 # AMD Ghost Environment (v1.56  Rust Edition)
 
 ## Overview
@@ -94,4 +94,3 @@ This project is developed by a solo 15 year old dev to fight the "NVIDIA Tax." N
 **Bitcoin (BTC):** `bc1q30wftehky6ct06pshrjh3ekhe9as9uzzdemd0r`
 
 *Keeping the RDNA dream alive one iteration at a time.*
-```
