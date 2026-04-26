@@ -1,6 +1,9 @@
 
 # AMD Ghost Environment (v1.56  Rust Edition)
 
+# Join the Discord!
+https://discord.gg/HvUPDhJQns
+
 ## Overview
 The AMD Ghost Environment is a high performance environment level daemon designed to bridge the gap between CUDA centric AI software and AMD ROCm hardware. By injecting a targeted set of environment variables and dynamic translation libraries at runtime this tool allows various AMD RDNA architectures to report their identity as high end NVIDIA GeForce RTX equivalents.
 
