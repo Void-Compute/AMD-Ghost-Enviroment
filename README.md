@@ -46,7 +46,6 @@ Ghost uses dynamic translation logic to map your AMD hardware to the closest NVI
 | AMD Host Series | Mask Version | NVIDIA Spoof Target |
 |:--- |:--- |:--- |
 | **RX 9000 Series** | 11.0.0 | NVIDIA GeForce RTX 5090 |
-| **RX 8000 Series** | 11.0.0 | NVIDIA GeForce RTX 4090 |
 | **RX 7000 Series** | 11.0.0 | NVIDIA GeForce RTX 4090 |
 | **RX 6000 Series** | 10.3.0 | NVIDIA GeForce RTX 3090 Ti |
 | **RX 5000 Series** | 10.1.0 | NVIDIA GeForce RTX 2080 Ti |
