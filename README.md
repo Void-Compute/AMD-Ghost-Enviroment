@@ -89,10 +89,3 @@ The Linux build is currently a Work In Progress (WIP). Please use the Windows Ru
 
 ---
 
-## Support the Grind
-This project is developed by a solo 15 year old dev to fight the "NVIDIA Tax." No banks no trackers  just code and caffeine.
-
-**Ethereum (ETH):** `0x9e046b3fa85932351b34520837d95bc1ad309748`
-**Bitcoin (BTC):** `bc1q30wftehky6ct06pshrjh3ekhe9as9uzzdemd0r`
-
-*Keeping the RDNA dream alive one iteration at a time.*
