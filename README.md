@@ -7,7 +7,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4.svg)]()
 [![Language](https://img.shields.io/badge/Language-Rust-DEA584.svg)]()
-[![Stars](https://img.shields.io/github/stars/Void-Compute/AMD-Ghost-Environment?style=flat&color=yellow)](https://github.com/Void-Compute/AMD-Ghost-Environment/stargazers)
+[![Stars](https://img.shields.io/github/stars/Void-Compute/AMD-Ghost-Environment?style=flat&color=yellow)](https://github.com/Void-Compute/AMD-Ghost-Environment)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2.svg)](https://discord.gg/HvUPDhJQns)
 
 **Interoperability middleware that enables CUDA-first AI and rendering software to run
