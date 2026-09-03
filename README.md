@@ -148,7 +148,7 @@ are maintained in
 | Completed | Ghost shell: `run`, `translate`, `benchmark`, `doctor`, `clean` |
 | Completed | Full CUDA driver surface verified on RDNA, including runtime JIT via Warp |
 | Completed | CUDA-Vulkan external-memory/semaphore bridge (render-compute sharing) |
-| Research | Viewport rendering for CUDA-dependent applications (see Technical-Docs) |
+| Completed | Viewport rendering for CUDA-dependent applications (see Technical-Docs) |
 | Research | Community beta-testing program (hardware matrix expansion) |
 | WIP | Linux build — not yet at feature parity with the Windows build |
 
@@ -171,7 +171,7 @@ release speed.
 
 **Does Isaac Sim run on AMD yet?**
 
-Not the full viewport — that is the current research objective (see Technical-Docs).
+Viewport works but only Raster mode — current research objective: Add HIP-RT and raytracing aswell as Sensors and RTX dependent feautres (eg. iray)-(see Technical-Docs).
 CUDA *compute* through Isaac Sim's frameworks (e.g. Warp) already executes on RDNA
 hardware via Ghost.
 
