@@ -21,6 +21,14 @@ on AMD RDNA hardware — translating CUDA driver calls to HIP at runtime, backed
 
 </div>
 
+<div align="center">
+
+![Isaac Sim Full (Newton Physics) — live viewport rendering an articulated robot on AMD Radeon RX 7800 XT](viewport_newton_amd.png)
+
+*Isaac Sim Full (Newton Physics) — live viewport at ~92 FPS on AMD Radeon RX 7800 XT.*
+
+</div>
+
 ---
 
 ## Overview
