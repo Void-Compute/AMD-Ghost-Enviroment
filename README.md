@@ -17,7 +17,7 @@ on AMD RDNA hardware — translating CUDA driver calls to HIP at runtime, backed
 
 [Join the Discord](https://discord.gg/HvUPDhJQns) ·
 [Documentation](https://github.com/Void-Compute/Technical-Docs) ·
-[Report an Issue](https://github.com/Void-Compute/AMD-Ghost-Environment/issues)
+[Report an Issue](https://github.com/Void-Compute/AMD-Ghost-Enviroment/issues)
 
 </div>
 
