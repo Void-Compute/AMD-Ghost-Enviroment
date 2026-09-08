@@ -105,7 +105,7 @@ application device checks and library heuristics select functional code paths:
 
 | AMD Host Series | Mask Version | Compatibility Profile |
 |:--- |:--- |:--- |
-| RX 9000 Series | 11.0.0 | GeForce RTX 5090 class |
+| RX 9000 Series | 12.0.0 | GeForce RTX 5090 class |
 | RX 7000 Series | 11.0.0 | GeForce RTX 4090 class |
 | RX 6000 Series | 10.3.0 | GeForce RTX 3090 Ti class |
 | RX 5000 Series | 10.1.0 | GeForce RTX 2080 Ti class |
