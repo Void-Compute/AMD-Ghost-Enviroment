@@ -1,31 +1,31 @@
 <div align="center">
 
-# AMD Ghost Environment
+# Project Ghost
 
-**Version 1.56 — Rust Edition**
+**Version 1.56 — Windows x64**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D4.svg)]()
 [![Language](https://img.shields.io/badge/Language-Rust-DEA584.svg)]()
-[![Stars](https://img.shields.io/github/stars/Void-Compute/AMD-Ghost-Enviroment?style=flat&color=yellow)](https://github.com/Void-Compute/AMD-Ghost-Environment)
+[![Stars](https://img.shields.io/github/stars/Void-Compute/AMD-Ghost-Environment?style=flat&color=yellow)](https://github.com/Void-Compute/AMD-Ghost-Environment)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2.svg)](https://discord.gg/HvUPDhJQns)
 
-**Interoperability middleware that enables CUDA-first AI and rendering software to run
-on AMD RDNA hardware — translating CUDA driver calls to HIP at runtime, backed by ZLUDA.**
+**Interoperability middleware for NVIDIA-first AI and rendering software on AMD
+RDNA hardware — CUDA translated to HIP at runtime, backed by ZLUDA.**
 
-*"Hardware limitations are just software problems waiting for a translation layer."*
+**Windows 10/11 x64 only. There is no Linux or macOS build.**
 
 [Join the Discord](https://discord.gg/HvUPDhJQns) ·
 [Documentation](https://github.com/Void-Compute/Technical-Docs) ·
-[Report an Issue](https://github.com/Void-Compute/AMD-Ghost-Enviroment/issues)
+[Report an Issue](https://github.com/Void-Compute/AMD-Ghost-Environment/issues)
 
 </div>
 
 <div align="center">
 
-![Isaac Sim Full (Newton Physics) — live viewport rendering an articulated robot on AMD Radeon RX 7800 XT](viewport_newton_amd.png)
+![Isaac Sim Full (Newton Physics) — raster viewport rendering an articulated robot on AMD Radeon RX 7800 XT](viewport_newton_amd.png)
 
-*Isaac Sim Full (Newton Physics) — live viewport at ~92 FPS on AMD Radeon RX 7800 XT.*
+*Isaac Sim Full (Newton Physics), raster viewport, RX 7800 XT, ~92 FPS.*
 
 </div>
 
@@ -33,75 +33,116 @@ on AMD RDNA hardware — translating CUDA driver calls to HIP at runtime, backed
 
 ## Overview
 
-The AMD Ghost Environment is a runtime interoperability layer for GPGPU acceleration.
-It enables software written against the NVIDIA CUDA ecosystem to execute on AMD Radeon
-hardware by combining:
+Project Ghost runs NVIDIA-first AI and rendering software on AMD RDNA hardware.
+It combines ZLUDA's CUDA-to-HIP translation with generated compatibility stubs
+and a managed Windows environment.
 
-- **ZLUDA** — an open-source CUDA-to-HIP translation layer performing the core
-  instruction translation
-- **Runtime-generated compatibility stubs** — JIT-compiled driver identity and
-  library-abstraction components tailored to the detected GPU
-- **Environment orchestration** — automated dependency setup, HIP device overrides,
-  Python import hooks, and a managed execution shell
-
-The result: applications that require `nvcuda.dll`, query device identity, or refuse to
-start without a supported NVIDIA GPU can execute on RDNA hardware, with the AMD GPU
-performing the actual computation.
+- **Windows 10/11 x64 only.** Registry, WMI, elevation and DLL deployment are
+  Windows-specific; Linux is not a target.
+- **ZLUDA** translates CUDA driver and runtime calls to HIP.
+- **Generated stubs** satisfy NVIDIA driver and library checks.
+- **Ghost** manages HIP overrides, Python hooks, deployment and the shell.
 
 ### Current Status
 
-The complete CUDA driver surface — initialization, device enumeration, context
-management, memory operations, streams, events, module loading/JIT and kernel launch —
-is verified working through the stack. NVIDIA's **Warp 1.13** framework initializes
-fully on RDNA hardware via Ghost and compiles kernels at runtime.
+**Working**
 
-**In active research:** full viewport rendering for large CUDA-dependent applications
-such as Isaac Sim, via Ghost's alternate rendering path. The architecture analysis and
-roadmap are documented in
-[Technical-Docs](https://github.com/Void-Compute/Technical-Docs).
+- CUDA driver surface: initialization, device enumeration, contexts, memory,
+  streams, events, module loading, JIT and kernel launch.
+- NVIDIA **Warp 1.13** initializes and compiles kernels on RDNA hardware.
+- **Blender 5.2.3 Cycles** renders with the OptiX device through Ghost's
+  Vulkan ray-query backend.
+- **NGX / DLSS** calls translate to AMD FSR/XeSS.
+- **Isaac Sim** raster viewport runs at ~92 FPS on an RX 7800 XT.
+- CUDA-Vulkan external-memory and semaphore interop.
+
+**In progress**
+
+- OptiX tile/film mapping. Renders are correct; residual pane artifacts remain
+  on non-tile-aligned sample tails.
+- Isaac Sim RTX/HIP-RT path, sensors and iray.
+- Broader OptiX application coverage and stability.
+
+---
+
+## Blender OptiX Renders
+
+Cycles, OptiX device, Blender 5.2.3 on an RX 7800 XT through Ghost.
+
+| Test scene | Benchmark scene |
+|:---:|:---:|
+| ![Cycles OptiX test scene](pics/optix-test-scene.png) | ![Cycles OptiX benchmark scene](pics/optix-benchmark-scene.png) |
+| Cube and sphere, 14.7 s | 32 spp benchmark render |
+
+---
+
+## API Coverage
+
+[![Ghost API coverage map](pics/coverage-map.png)](pics/coverage-map.svg)
+
+*One square = one known export. Hollow squares are unverified surface, not
+counts. Color = status. Red = no functional path; absent-library surfaces are
+estimated.*
+
+| API / library | Module(s) | Status |
+|:--- |:--- |:--- |
+| CUDA Driver (731), CUDA Runtime redirector, NVRTC (21) | ZLUDA + Ghost tee | **Verified** |
+| cuBLAS (530), cuSPARSE (448), cuDNN 8/9 (221), cuFFT (60), cuBLASLt (45) | ZLUDA bundles | **ZLUDA-backed** |
+| OptiX (48) | `nvoptix.dll` | **In progress** |
+| CUDA-Vulkan interop (9), Vulkan layer (8) | Ghost DLLs | **Verified** |
+| NGX / DLSS (945) | `nvngx.dll` | **Translated** to FSR/XeSS |
+| NVML (342) | Ghost stub | **ABI stub** |
+| Video (342), CUPTI (189), Aftermath (23) | Ghost stubs | **Not covered** (ABI only) |
+| TensorRT, NCCL, cuRAND, cuSOLVER, nvJPEG | — | **Not bundled** |
+
+OptiX ray tracing is the active work. Stubs keep the interface, not the feature.
+This is a surface inventory, not a compatibility guarantee.
 
 ---
 
 ## Quick Start
 
-> **Requirements:** Windows 10/11, an AMD RDNA or Vega GPU, and elevated execution
-> rights (Ghost manages registry configuration and deploys system stubs during setup).
-> [Visual Studio Build Tools (C++)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-> are required for on-the-fly stub compilation; `doctor` verifies this automatically.
+> **Windows 10/11 x64 only.** You need an AMD RDNA or Vega GPU, Administrator
+> rights, and [Visual Studio Build Tools (C++)](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+> Ghost manages registry configuration and deploys system stubs during setup;
+> `doctor` verifies the toolchain automatically.
 
-1. Download the latest build from the
-   [Releases](https://github.com/Void-Compute/AMD-Ghost-Environment/releases) page, or
-   build from source.
+1. Download the latest Windows build from the
+   [Releases](https://github.com/Void-Compute/AMD-Ghost-Environment/releases) page,
+   or build from source.
 2. Right-click `ghost_amd.exe` and select **Run as Administrator**.
-3. On first launch, Ghost automatically downloads its dependencies (ZLUDA, HIP SDK
-   components, compatibility stubs) and detects the installed hardware.
+3. On first launch, Ghost downloads its dependencies (ZLUDA, HIP SDK components,
+   compatibility stubs) and detects the installed hardware.
 
-## The Ghost Shell
+### The Ghost Shell
 
-Once inside the `(ghost amd)>` prompt, the following commands are available:
+Once inside the `(ghost amd)>` prompt:
 
 | Command | Description |
 |---|---|
-| `run <script.py> [args]` | Launches AI scripts with smart failover and the Waiting Room interface |
-| `translate <folder>` | Converts CUDA C++/Python source to native AMD HIP via HIPIFY (Perl) |
-| `benchmark` | Measures actual GPU throughput (FP16 / FP32 TFLOPS) |
-| `doctor` | Diagnoses the environment: MSVC `cl.exe`, ROCm, drivers, HIP SDK |
-| `install-deps` | Manually re-downloads all core Ghost components |
-| `clean` | Removes registry configuration and purges the `.ghost` environment |
+| `run [--no-tui] <script.py\|.bat\|.exe> [args]` | Runs Python scripts, batch files or Windows executables with failover and the Waiting Room interface |
+| `translate <folder>` | Converts CUDA C++/Python source to AMD HIP via HIPIFY |
+| `benchmark` | Measures GPU throughput (FP16 / FP32 TFLOPS) |
+| `doctor` | Checks MSVC `cl.exe`, ROCm, drivers and the HIP SDK |
+| `install-deps` | Re-downloads the core Ghost components |
+| `clean-stubs` | Removes Ghost-deployed DLL/EXE stubs from the current folder tree; keeps `.ghost` and registry setup |
+| `clean` | Removes Ghost registry configuration and purges `.ghost` |
 
-## The Waiting Room Interface
+### The Waiting Room
 
-While large AI models load, Ghost provides a live monitoring interface:
+While large models load, Ghost shows live telemetry and keeps the shell usable:
 
-- **Real-time telemetry** — VRAM usage, temperature and GPU load
-- **DOOM** — a fully functional DOOM port runnable inside the shell (key: `D`)
-- **Background music** — toggleable audio stream (key: `M`)
-- Control is returned to the hosted application the moment it opens its local port
+- VRAM usage, temperature and GPU load
+- **DOOM** (key: `D`)
+- Toggleable background music (key: `M`)
+- Control returns to the application as soon as it opens its local port
 
-## Hardware Support Matrix
+---
 
-Ghost maps detected AMD hardware to the closest NVIDIA compatibility profile so that
-application device checks and library heuristics select functional code paths:
+## Hardware Support
+
+Ghost maps detected AMD hardware to the closest NVIDIA compatibility profile so
+device checks and library heuristics select functional code paths.
 
 | AMD Host Series | Mask Version | Compatibility Profile |
 |:--- |:--- |:--- |
@@ -112,28 +153,29 @@ application device checks and library heuristics select functional code paths:
 | Radeon VII / MI50 | 9.0.6 | Tesla V100 class |
 | Vega 64 / Vega 56 | 9.0.0 | Tesla P100 class |
 
-For unsupported devices, please open an issue — new compatibility profiles are a
-single mapping entry.
+For unsupported devices, open an issue. New profiles are usually a single
+mapping entry.
 
 ---
 
 ## Technical Architecture
 
-- **JIT stub generation** — writes and compiles C++ with `cl.exe` at runtime to produce
-  an `nvml.dll` abstraction reflecting the detected AMD VRAM configuration and device
-  name in memory queries.
-- **Smart failover** — applications launch natively via ROCm first for maximum
-  performance; on crash or incompatibility, Ghost relaunches the process with the ZLUDA
-  translation layer injected.
-- **`HSA_OVERRIDE_GFX_VERSION`** — maps unsupported RDNA revisions onto compatible ROCm
-  targets so the HIP runtime accepts the hardware.
-- **Python import hooks** — a `sitecustomize.py` layer so that `torch.cuda.is_available()`
-  reports accurately for stacks probing before initialization.
-- **Registry guard** — scopes configuration under `SOFTWARE\NVIDIA Corporation` keys
-  with automatic cleanup; the `clean` command removes everything Ghost created.
+- **Windows integration** — registry configuration, WMI queries, elevated DLL
+  deployment and process launch. Windows 10/11 x64 only.
+- **JIT stub generation** — compiles C++ with `cl.exe` at runtime to produce an
+  `nvml.dll` abstraction reflecting the detected AMD VRAM and device name.
+- **Smart failover** — launches natively through ROCm first; on crash or
+  incompatibility, relaunches with the ZLUDA translation layer injected.
+- **OptiX backend** — translates OptiX launches to Vulkan ray queries through
+  CUDA-Vulkan interop, with no NVIDIA GPU in the path.
+- **`HSA_OVERRIDE_GFX_VERSION`** — maps unsupported RDNA revisions onto
+  compatible ROCm targets.
+- **Python import hooks** — `sitecustomize.py` makes `torch.cuda.is_available()`
+  report correctly for stacks that probe before initialization.
+- **Registry guard** — scopes configuration under
+  `SOFTWARE\NVIDIA Corporation`; `clean` removes everything Ghost created.
 
-The complete architecture analysis, design documents and reverse-engineering history
-are maintained in
+Architecture analysis, design notes and reverse-engineering history live in
 **[Void-Compute/Technical-Docs](https://github.com/Void-Compute/Technical-Docs)**.
 
 ---
@@ -142,48 +184,61 @@ are maintained in
 
 | Status | Item |
 |:---|:---|
-| Completed | Automated ZLUDA integration with smart failover |
-| Completed | Interactive Waiting Room interface (telemetry, DOOM, music) |
-| Completed | Full Rust rewrite — hardened Windows daemon (registry/WMI hooks) |
-| Completed | Ghost shell: `run`, `translate`, `benchmark`, `doctor`, `clean` |
-| Completed | Full CUDA driver surface verified on RDNA, including runtime JIT via Warp |
-| Completed | CUDA-Vulkan external-memory/semaphore bridge (render-compute sharing) |
-| Completed | Viewport rendering for CUDA-dependent applications (see Technical-Docs) |
-| Research | Community beta-testing program (hardware matrix expansion) |
-| WIP | Linux build — not yet at feature parity with the Windows build |
+| Completed | Windows shell and daemon (registry, WMI, deployment) |
+| Completed | ZLUDA integration with ROCm-first failover |
+| Completed | CUDA driver/runtime surface, NVRTC and runtime JIT |
+| Completed | CUDA-Vulkan external-memory and semaphore bridge |
+| Completed | First working OptiX device path in Blender Cycles |
+| Completed | NGX/DLSS to FSR/XeSS translation |
+| Completed | Isaac Sim raster viewport |
+| In progress | OptiX tile/film mapping and artifact-free output |
+| In progress | Isaac Sim RTX/HIP-RT, sensors and iray |
+| Next | OptiX application coverage and stability |
+| Next | Hardware matrix expansion and community beta |
+| Not planned | Linux and macOS builds |
 
-Development is balanced alongside full-time studies; stability is prioritized over
-release speed.
+Development runs alongside full-time studies; stability comes before release
+speed.
 
 ---
 
 ## Community
 
-- **[Discord](https://discord.gg/HvUPDhJQns)** — updates, support, and the community
-  hardware-testing program currently being organized across the RDNA/Vega lineup
-- **[Issues](https://github.com/Void-Compute/AMD-Ghost-Environment/issues)** — bug
-  reports and hardware requests are welcome; please include GPU model, driver version
-  and `ghost_trace.log`
-- **[Technical-Docs](https://github.com/Void-Compute/Technical-Docs)** — the complete
-  documented history, architecture analysis and planned work
+- **[Discord](https://discord.gg/HvUPDhJQns)** — updates, support and the
+  community hardware-testing program
+- **[Issues](https://github.com/Void-Compute/AMD-Ghost-Environment/issues)** —
+  include GPU model, driver version and `ghost_trace.log`
+- **[Technical-Docs](https://github.com/Void-Compute/Technical-Docs)** — full
+  history, architecture analysis and planned work
 
 ## FAQ
 
+**Does it run on Linux?**
+
+No. Ghost targets Windows 10/11 x64. Registry, WMI, elevation and DLL deployment
+are core to how it works; Linux and macOS are not planned.
+
 **Does Isaac Sim run on AMD yet?**
 
-Viewport works but only Raster mode — current research objective: Add HIP-RT and raytracing aswell as Sensors and RTX dependent feautres (eg. iray)-(see Technical-Docs).
-CUDA *compute* through Isaac Sim's frameworks (e.g. Warp) already executes on RDNA
-hardware via Ghost.
+The raster viewport works. RTX/HIP-RT, sensors and iray are the active research
+targets. CUDA compute through Isaac Sim frameworks such as Warp already runs on
+RDNA via Ghost.
+
+**Does Blender OptiX work?**
+
+Yes. Cycles renders with the OptiX device through Ghost's Vulkan ray-query
+backend. Tile/film mapping is still being finished, so some sample counts show
+pane artifacts.
 
 **Why are Administrator rights required?**
 
-Ghost performs registry configuration and deploys system-level stubs during setup. All
-modifications are reversible via the `clean` command.
+Ghost configures the registry and deploys system-level stubs during setup. All
+changes are reversible with `clean`.
 
 **Where did my registry changes go?**
 
-The `clean` command removes all Ghost-managed keys and purges the `.ghost` directory.
-Ghost scopes its own configuration and does not modify keys it did not create.
+`clean` removes Ghost-managed keys and purges `.ghost`. Ghost does not modify
+keys it did not create.
 
 ---
 
